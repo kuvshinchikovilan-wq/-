@@ -1,0 +1,30 @@
+name: ILAN.KUV Daily Market Poster
+
+on:
+  schedule:
+    # רץ בימים שני עד שישי בשעה 20:05 UTC (שהם 23:05 שעון ישראל)
+    - cron: '5 20 * * 1-5'
+  workflow_dispatch: # מאפשר לך ללחוץ על כפתור הפעלה ידני לבדיקה בכל רגע
+
+jobs:
+  build-and-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install yfinance requests playwright
+          playwright install --with-deps chromium
+
+      - name: Generate Poster and Send to Discord & WhatsApp
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WHATSAPP_WEBHOOK_URL: ${{ secrets.WHATSAPP_WEBHOOK_URL }}
+        run: python generate_poster.py
