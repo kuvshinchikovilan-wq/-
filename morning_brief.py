@@ -1,11 +1,9 @@
 import os
-import io
+import base64
 import requests
 from datetime import datetime
 import pytz
-from PIL import Image, ImageDraw, ImageFont, ImageOps
-from bidi.algorithm import get_display
-import arabic_reshaper
+from playwright.sync_api import sync_playwright
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_MORNING")
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
@@ -18,85 +16,31 @@ MAJOR_TICKERS = {
     "BA", "CAT", "GE", "GM", "F", "IBM", "MCD", "NKE", "PEP", "KO"
 }
 
-# מילון תרגום אוטומטי של דוחות מאקרו לעברית
-MACRO_TRANSLATIONS = {
-    "CPI m/m": "מדד המחירים לצרכן (חודשי)",
-    "CPI y/y": "מדד המחירים לצרכן (שנתי)",
-    "Core CPI m/m": "מדד הליבה לצרכן (חודשי)",
-    "Core CPI y/y": "מדד הליבה לצרכן (שנתי)",
-    "Core PCE Price Index m/m": "מדד האינפלציה של הפד (Core PCE)",
-    "PPI m/m": "מדד המחירים ליצרן (חודשי)",
-    "Core PPI m/m": "מדד הליבה ליצרן (חודשי)",
-    "Unemployment Claims": "תביעות ראשוניות לדמי אבטלה",
-    "Non-Farm Employment Change": "דוח תעסוקה - משרות חדשות (NFP)",
-    "Unemployment Rate": "שיעור האבטלה",
-    "Average Hourly Earnings m/m": "שכר ממוצע לשעה (חודשי)",
-    "Advance GDP q/q": "תוצר מקומי גולמי (GDP ראשוני)",
-    "Prelim GDP q/q": "תוצר מקומי גולמי (GDP מעודכן)",
-    "Final GDP q/q": "תוצר מקומי גולמי (GDP סופי)",
-    "Federal Funds Rate": "החלטת הריבית של הפד (FOMC)",
-    "FOMC Statement": "הצהרת מדיניות הפד (FOMC)",
-    "FOMC Press Conference": "מסיבת העיתונאים של יו״ר הפד פאוול",
-    "Fed Chair Powell Speaks": "נאום יו״ר הפד ג׳רום פאוול",
-    "FOMC Meeting Minutes": "פרוטוקול ישיבת הפד",
-    "Retail Sales m/m": "מכירות קמעונאיות (חודשי)",
-    "Core Retail Sales m/m": "מכירות קמעונאיות - ליבה",
-    "ISM Manufacturing PMI": "מדד מנהלי הרכש בתעשייה (ISM)",
-    "ISM Services PMI": "מדד מנהלי הרכש בשירותים (ISM)",
-    "Flash Manufacturing PMI": "מדד מנהלי הרכש בתעשייה (Flash)",
-    "Flash Services PMI": "מדד מנהלי הרכש בשירותים (Flash)",
-    "CB Consumer Confidence": "מדד אמון הצרכנים (CB)",
-    "Prelim UoM Consumer Sentiment": "סנטימנט הצרכנים של אונ׳ מישיגן",
-    "Revised UoM Consumer Sentiment": "סנטימנט הצרכנים של מישיגן (סופי)",
-    "JOLTS Job Openings": "סקר משרות פנויות (JOLTS)",
-    "ADP Non-Farm Employment Change": "סקר תעסוקה במגזר הפרטי (ADP)",
-    "Crude Oil Inventories": "מלאי הנפט הגולמי בארה״ב",
-    "Existing Home Sales": "מכירות בתים קיימים",
-    "New Home Sales": "מכירות בתים חדשים",
-    "Building Permits": "אישורי בנייה",
-    "Durable Goods Orders m/m": "הזמנות מוצרים בני קיימא",
-    "Core Durable Goods Orders m/m": "הזמנות מוצרים בני קיימא (ליבה)",
-    "Empire State Manufacturing Index": "מדד הייצור של ניו יורק (Empire State)",
-    "Philly Fed Manufacturing Index": "מדד הייצור של פילדלפיה"
-}
-
-def heb(text):
-    """סידור טקסט בעברית שיוצג בכיוון הנכון בתמונה"""
-    reshaped = arabic_reshaper.reshape(str(text))
-    return get_display(reshaped)
-
-def translate_macro(eng_title):
-    if eng_title in MACRO_TRANSLATIONS:
-        return MACRO_TRANSLATIONS[eng_title]
-    # תרגום חלקי חכם אם השם מעט שונה
-    for k, v in MACRO_TRANSLATIONS.items():
-        if k.lower() in eng_title.lower():
-            return v
-    if "Speaks" in eng_title and "FOMC" in eng_title:
-        return "נאום חבר פד (FOMC)"
-    return "נתון מאקרו ארה״ב"
+def get_logo_base64():
+    for fname in ["logo.jpg", "logo.png", "logo.jpeg", "LOGO.jpg", "LOGO.png"]:
+        if os.path.exists(fname):
+            with open(fname, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+                ext = "png" if fname.lower().endswith("png") else "jpeg"
+                return f"data:image/{ext};base64,{encoded}"
+    return ""
 
 def get_macro_events():
     url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
     events = []
     now_il = datetime.now(ISRAEL_TZ)
     today_str = now_il.strftime("%Y-%m-%d")
-    
     try:
         r = requests.get(url, timeout=10)
         if r.status_code == 200:
-            data = r.json()
-            for item in data:
+            for item in r.json():
                 if item.get("country") == "USD" and item.get("impact") in ["High", "Medium"]:
                     raw_date = item.get("date", "")
                     if raw_date.startswith(today_str):
                         dt = datetime.fromisoformat(raw_date).astimezone(ISRAEL_TZ)
-                        time_str = dt.strftime("%H:%M")
-                        eng_title = item.get("title", "")
                         events.append({
-                            "time": time_str,
-                            "title_en": eng_title,
-                            "title_he": translate_macro(eng_title),
+                            "time": dt.strftime("%H:%M"),
+                            "title": item.get("title", ""),
                             "impact": item.get("impact", ""),
                             "forecast": item.get("forecast", "-") or "-",
                             "previous": item.get("previous", "-") or "-"
@@ -119,14 +63,18 @@ def get_earnings():
         if r.status_code == 200:
             rows = r.json().get("data", {}).get("rows", []) or []
             rows.sort(key=lambda x: (x.get("symbol") not in MAJOR_TICKERS))
-            
             for row in rows:
                 sym = row.get("symbol", "").strip()
                 time_type = row.get("time", "")
                 eps_est = row.get("epsForecast", "-") or "-"
-                name = row.get("name", "")[:16]
-                
-                entry = {"symbol": sym, "name": name, "eps": eps_est, "is_major": sym in MAJOR_TICKERS}
+                name = row.get("name", "")[:22]
+                entry = {
+                    "symbol": sym,
+                    "name": name,
+                    "eps": eps_est,
+                    "is_major": sym in MAJOR_TICKERS,
+                    "logo": f"https://financialmodelingprep.com/image-stock/{sym}.png"
+                }
                 if "pre-market" in time_type:
                     bmo.append(entry)
                 elif "after-hours" in time_type:
@@ -135,201 +83,312 @@ def get_earnings():
         print(f"Error fetching earnings: {e}")
     return bmo[:6], amc[:6]
 
-def fetch_ticker_logo(symbol, size=56):
-    """שליפת לוגו של מניה מהאינטרנט וחיתוך לעיגול יוקרתי"""
-    urls = [
-        f"https://financialmodelingprep.com/image-stock/{symbol}.png",
-        f"https://storage.googleapis.com/iex/api/logos/{symbol}.png"
-    ]
-    for url in urls:
-        try:
-            r = requests.get(url, timeout=4)
-            if r.status_code == 200 and len(r.content) > 500:
-                logo_img = Image.open(io.BytesIO(r.content)).convert("RGBA")
-                # יצירת רקע לבן עגול כדי שהלוגו יבלוט
-                bg = Image.new("RGBA", (size, size), (255, 255, 255, 255))
-                logo_img.thumbnail((int(size * 0.78), int(size * 0.78)), Image.Resampling.LANCZOS)
-                offset = ((size - logo_img.width) // 2, (size - logo_img.height) // 2)
-                bg.paste(logo_img, offset, logo_img)
-                
-                # מסכה עגולה
-                mask = Image.new("L", (size, size), 0)
-                draw_mask = ImageDraw.Draw(mask)
-                draw_mask.ellipse((0, 0, size, size), fill=255)
-                output = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-                output.paste(bg, (0, 0), mask)
-                return output
-        except:
-            continue
-    return None
-
-def load_brand_logo(size=145):
-    """טעינת הלוגו של אילן מהפרויקט"""
-    for fname in ["logo.jpg", "logo.png", "logo.jpeg", "LOGO.jpg", "LOGO.png"]:
-        if os.path.exists(fname):
-            try:
-                im = Image.open(fname).convert("RGBA")
-                im = ImageOps.fit(im, (size, size), Image.Resampling.LANCZOS)
-                mask = Image.new("L", (size, size), 0)
-                ImageDraw.Draw(mask).rounded_rectangle((0, 0, size, size), radius=24, fill=255)
-                out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-                out.paste(im, (0, 0), mask)
-                return out
-            except Exception as e:
-                print(f"Logo load error: {e}")
-    return None
-
-def create_image(macro_events, bmo, amc):
-    width, height = 1280, 1520
-    bg_dark = (10, 16, 29)        # כחול נייבי עמוק שתואם ללוגו
-    card_bg = (17, 26, 46)        # כרטיסייה כחולה כהה
-    row_bg = (24, 36, 62)         # רקע שורה פנימית
-    gold = (218, 176, 96)         # זהב יוקרתי מהלוגו שלך
-    gold_bright = (245, 208, 125)
-    white = (255, 255, 255)
-    gray = (160, 174, 192)
-    red_high = (239, 68, 68)
-    orange_med = (245, 158, 11)
-    blue_accent = (56, 189, 248)
-
-    img = Image.new("RGBA", (width, height), bg_dark)
-    draw = ImageDraw.Draw(img)
-
-    # פונטים גדולים וחדים שתומכים בעברית ובאנגלית
-    font_path_b = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    font_path_r = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    
-    f_header = ImageFont.truetype(font_path_b, 50)
-    f_sub = ImageFont.truetype(font_path_b, 28)
-    f_sec_title = ImageFont.truetype(font_path_b, 32)
-    f_macro_he = ImageFont.truetype(font_path_b, 26)
-    f_macro_en = ImageFont.truetype(font_path_r, 20)
-    f_time = ImageFont.truetype(font_path_b, 28)
-    f_ticker = ImageFont.truetype(font_path_b, 30)
-    f_comp = ImageFont.truetype(font_path_r, 20)
-    f_eps = ImageFont.truetype(font_path_b, 22)
-    f_badge = ImageFont.truetype(font_path_b, 19)
-
+def build_html(macro_events, bmo, amc):
     now_il = datetime.now(ISRAEL_TZ)
-    date_display = now_il.strftime("%d/%m/%Y")
+    date_display = now_il.strftime("%d / %m / %Y")
+    day_name = now_il.strftime("%A").upper()
+    logo_src = get_logo_base64()
 
-    # --- HEADER יוקרתי עם הלוגו שלך ---
-    draw.rectangle([(0, 0), (width, 195)], fill=(13, 21, 38))
-    draw.line([(0, 195), (width, 195)], fill=gold, width=4)
+    logo_html = f'<img src="{logo_src}" class="brand-logo" />' if logo_src else '<div class="brand-fallback">IK</div>'
 
-    brand_logo = load_brand_logo(145)
-    if brand_logo:
-        # מסגרת זהב סביב הלוגו
-        draw.rounded_rectangle([(46, 21), (199, 174)], radius=26, outline=gold, width=3)
-        img.paste(brand_logo, (50, 25), brand_logo)
-        text_x = 230
-    else:
-        text_x = 50
-
-    draw.text((text_x, 38), "ILAN.KUV | VIP MARKET BRIEF", fill=gold_bright, font=f_header)
-    draw.text((text_x, 108), heb(f"יומן מאקרו כלכלי ודוחות וול סטריט  •  {date_display}"), fill=white, font=f_sub)
-
-    # --- SECTION 1: יומן מאקרו (עברית + אנגלית) ---
-    y_macro = 230
-    macro_box_h = 600
-    draw.rounded_rectangle([(40, y_macro), (width - 40, y_macro + macro_box_h)], radius=20, fill=card_bg, outline=gold, width=2)
-    
-    # כותרת סקשן מאקרו
-    draw.rounded_rectangle([(40, y_macro), (width - 40, y_macro + 68)], radius=20, fill=(26, 39, 68))
-    draw.text((70, y_macro + 16), "US MACRO CALENDAR", fill=gold_bright, font=f_sec_title)
-    heb_macro_hdr = heb("אירועי מאקרו מרכזיים היום (שעון ישראל)")
-    draw.text((width - 70 - draw.textlength(heb_macro_hdr, font=f_sec_title), y_macro + 16), heb_macro_hdr, fill=white, font=f_sec_title)
-
-    # כותרות עמודות
-    col_y = y_macro + 82
-    draw.text((70, col_y), heb("שעה"), fill=gray, font=f_macro_en)
-    draw.text((195, col_y), heb("חשיבות"), fill=gray, font=f_macro_en)
-    draw.text((345, col_y), heb("האירוע הכלכלי (עברית + אנגלית)"), fill=gray, font=f_macro_en)
-    draw.text((925, col_y), heb("צפי"), fill=gold_bright, font=f_macro_en)
-    draw.text((1085, col_y), heb("קודם"), fill=gray, font=f_macro_en)
-
-    ry = y_macro + 120
+    # בניית שורות מאקרו
     if not macro_events:
-        msg = heb("אין היום פרסומי מאקרו בעלי השפעה גבוהה בארה״ב")
-        draw.text(((width - draw.textlength(msg, font=f_sec_title)) // 2, ry + 160), msg, fill=gray, font=f_sec_title)
+        macro_rows = '<div class="empty-state">No High or Medium Impact US Macro Events Scheduled Today</div>'
     else:
+        macro_rows = ""
         for ev in macro_events:
-            draw.rounded_rectangle([(60, ry), (width - 60, ry + 72)], radius=12, fill=row_bg)
-            
-            # שעה
-            draw.text((75, ry + 20), ev["time"], fill=white, font=f_time)
-            
-            # חשיבות
-            imp_color = red_high if ev["impact"] == "High" else orange_med
-            imp_text = heb("גבוהה") if ev["impact"] == "High" else heb("בינונית")
-            draw.rounded_rectangle([(185, ry + 18), (310, ry + 54)], radius=8, fill=imp_color)
-            tw = draw.textlength(imp_text, font=f_badge)
-            draw.text((185 + (125 - tw) / 2, ry + 24), imp_text, fill=white, font=f_badge)
+            badge_cls = "badge-high" if ev["impact"] == "High" else "badge-med"
+            macro_rows += f"""
+            <div class="macro-row">
+                <div class="m-time">{ev['time']}</div>
+                <div class="m-impact"><span class="badge {badge_cls}">{ev['impact'].upper()}</span></div>
+                <div class="m-title">{ev['title']}</div>
+                <div class="m-forecast">{ev['forecast']}</div>
+                <div class="m-prev">{ev['previous']}</div>
+            </div>
+            """
 
-            # שם הדוח בעברית (גדול) + אנגלית מתחתיו
-            draw.text((345, ry + 8), heb(ev["title_he"]), fill=white, font=f_macro_he)
-            draw.text((345, ry + 41), ev["title_en"][:45], fill=gray, font=f_macro_en)
-
-            # צפי וקודם
-            draw.text((925, ry + 20), str(ev["forecast"]), fill=gold_bright, font=f_time)
-            draw.text((1085, ry + 20), str(ev["previous"]), fill=gray, font=f_time)
-            ry += 80
-
-    # --- SECTION 2: חברות מדווחות עם לוגואים ---
-    y_earn = 865
-    earn_h = 575
-    col_w = (width - 100) // 2
-
-    # פונקציה פנימית לציור עמודת דוחות (BMO או AMC)
-    def draw_earnings_column(x_start, title_en, title_he, items, accent_color):
-        draw.rounded_rectangle([(x_start, y_earn), (x_start + col_w, y_earn + earn_h)], radius=20, fill=card_bg, outline=accent_color, width=2)
-        draw.rounded_rectangle([(x_start, y_earn), (x_start + col_w, y_earn + 65)], radius=20, fill=(26, 39, 68))
-        draw.text((x_start + 25, y_earn + 16), title_en, fill=accent_color, font=f_sec_title)
-        h_txt = heb(title_he)
-        draw.text((x_start + col_w - 25 - draw.textlength(h_txt, font=f_macro_he), y_earn + 19), h_txt, fill=white, font=f_macro_he)
-
-        ey = y_earn + 82
+    # פונקציה לבניית כרטיסיות דוחות
+    def render_earnings(items):
         if not items:
-            empty_msg = heb("אין דיווחים בולטים")
-            draw.text((x_start + (col_w - draw.textlength(empty_msg, font=f_macro_he)) / 2, ey + 180), empty_msg, fill=gray, font=f_macro_he)
-        else:
-            for item in items:
-                draw.rounded_rectangle([(x_start + 18, ey), (x_start + col_w - 18, ey + 72)], radius=14, fill=row_bg)
-                
-                # שליפת והדבקת לוגו המניה
-                logo_im = fetch_ticker_logo(item["symbol"], size=54)
-                if logo_im:
-                    img.paste(logo_im, (x_start + 30, ey + 9), logo_im)
-                else:
-                    # עיגול זהב עם האות הראשונה אם אין לוגו
-                    draw.ellipse([(x_start + 30, ey + 9), (x_start + 84, ey + 63)], fill=gold)
-                    letter = item["symbol"][0]
-                    lw = draw.textlength(letter, font=f_ticker)
-                    draw.text((x_start + 30 + (54 - lw) / 2, ey + 17), letter, fill=bg_dark, font=f_ticker)
+            return '<div class="empty-state">No Notable Earnings Scheduled</div>'
+        html = ""
+        for it in items:
+            star_cls = "major-card" if it["is_major"] else ""
+            html += f"""
+            <div class="earn-row {star_cls}">
+                <div class="earn-left">
+                    <div class="ticker-logo-wrap">
+                        <img src="{it['logo']}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" class="ticker-logo" />
+                        <div class="ticker-fallback" style="display:none;">{it['symbol'][0]}</div>
+                    </div>
+                    <div class="ticker-info">
+                        <div class="ticker-sym">${it['symbol']} {'<span class="star">★</span>' if it['is_major'] else ''}</div>
+                        <div class="ticker-name">{it['name']}</div>
+                    </div>
+                </div>
+                <div class="earn-eps">
+                    <span class="eps-label">EST EPS</span>
+                    <span class="eps-val">{it['eps']}</span>
+                </div>
+            </div>
+            """
+        return html
 
-                # טיקר ושם חברה בגדול
-                t_color = gold_bright if item["is_major"] else white
-                draw.text((x_start + 100, ey + 8), f"${item['symbol']}", fill=t_color, font=f_ticker)
-                draw.text((x_start + 100, ey + 42), item["name"], fill=gray, font=f_comp)
+    bmo_html = render_earnings(bmo)
+    amc_html = render_earnings(amc)
 
-                # צפי EPS
-                eps_text = f"EPS צפי: {item['eps']}"
-                eps_heb = heb(eps_text)
-                ew = draw.textlength(eps_heb, font=f_eps)
-                draw.text((x_start + col_w - 35 - ew, ey + 23), eps_heb, fill=white, font=f_eps)
-                ey += 80
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&family=Rubik:wght@500;700;800&display=swap" rel="stylesheet">
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+            body {{
+                width: 1200px;
+                min-height: 1450px;
+                font-family: 'Montserrat', 'Rubik', sans-serif;
+                background: radial-gradient(circle at 50% 0%, #162447 0%, #0a0f1d 55%, #050811 100%);
+                color: #ffffff;
+                padding: 45px;
+                position: relative;
+                overflow: hidden;
+            }}
+            /* אפקטים של תאורת רקע יוקרתית */
+            .glow-top {{
+                position: absolute; top: -180px; left: 50%; transform: translateX(-50%);
+                width: 750px; height: 380px;
+                background: radial-gradient(circle, rgba(212,175,55,0.22) 0%, rgba(0,0,0,0) 70%);
+                pointer-events: none;
+            }}
+            /* HEADER */
+            .header {{
+                display: flex; align-items: center; justify-content: space-between;
+                background: linear-gradient(135deg, rgba(23,34,59,0.9) 0%, rgba(12,19,34,0.95) 100%);
+                border: 2px solid rgba(212, 175, 55, 0.45);
+                border-radius: 26px;
+                padding: 28px 40px;
+                box-shadow: 0 20px 50px rgba(0,0,0,0.6), inset 0 1px 2px rgba(255,255,255,0.15);
+                margin-bottom: 35px;
+                position: relative;
+            }}
+            .header-left {{ display: flex; align-items: center; gap: 28px; }}
+            .brand-logo {{
+                width: 115px; height: 115px; border-radius: 22px;
+                object-fit: cover;
+                border: 2.5px solid #e5c158;
+                box-shadow: 0 0 28px rgba(229, 193, 88, 0.35);
+            }}
+            .brand-fallback {{
+                width: 115px; height: 115px; border-radius: 22px;
+                background: linear-gradient(135deg, #d4af37, #aa7c11);
+                display: flex; align-items: center; justify-content: center;
+                font-size: 44px; font-weight: 900; color: #080d1a;
+            }}
+            .title-group h1 {{
+                font-size: 42px; font-weight: 900; letter-spacing: 1.5px;
+                background: linear-gradient(90deg, #fff6d6 0%, #e5c158 50%, #c59b27 100%);
+                -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                text-transform: uppercase;
+            }}
+            .title-group p {{
+                font-size: 18px; font-weight: 600; color: #94a3b8;
+                letter-spacing: 3px; margin-top: 8px; text-transform: uppercase;
+            }}
+            .date-box {{
+                text-align: right;
+                background: rgba(212, 175, 55, 0.1);
+                border: 1px solid rgba(212, 175, 55, 0.35);
+                padding: 16px 26px; border-radius: 18px;
+            }}
+            .date-day {{ font-size: 15px; font-weight: 800; color: #e5c158; letter-spacing: 2.5px; }}
+            .date-str {{ font-size: 26px; font-weight: 800; color: #ffffff; margin-top: 4px; }}
 
-    # ציור שתי העמודות
-    draw_earnings_column(40, "BEFORE OPEN", "לפני הפתיחה", bmo, gold)
-    draw_earnings_column(60 + col_w, "AFTER CLOSE", "אחרי הסגירה", amc, blue_accent)
+            /* SECTION CARD */
+            .card {{
+                background: linear-gradient(180deg, rgba(19, 28, 49, 0.88) 0%, rgba(11, 17, 30, 0.92) 100%);
+                border: 1px solid rgba(255, 255, 255, 0.09);
+                border-top: 2px solid rgba(229, 193, 88, 0.5);
+                border-radius: 24px;
+                padding: 30px 35px;
+                box-shadow: 0 18px 40px rgba(0,0,0,0.5);
+                margin-bottom: 35px;
+            }}
+            .card-header {{
+                display: flex; align-items: center; justify-content: space-between;
+                margin-bottom: 24px; padding-bottom: 16px;
+                border-bottom: 1px solid rgba(255,255,255,0.08);
+            }}
+            .card-title {{
+                font-size: 25px; font-weight: 800; letter-spacing: 1px;
+                display: flex; align-items: center; gap: 12px; color: #f8fafc;
+            }}
+            .gold-dot {{
+                width: 12px; height: 26px; border-radius: 6px;
+                background: linear-gradient(180deg, #fceabb 0%, #d4af37 100%);
+                box-shadow: 0 0 12px rgba(212, 175, 55, 0.6);
+            }}
+            .blue-dot {{
+                width: 12px; height: 26px; border-radius: 6px;
+                background: linear-gradient(180deg, #7dd3fc 0%, #0284c7 100%);
+                box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+            }}
+            .card-sub {{ font-size: 15px; font-weight: 700; color: #e5c158; letter-spacing: 1.5px; }}
 
-    # --- FOOTER ---
-    footer_txt = "ILAN.KUV  •  VIP FINANCIAL COMMUNITY  •  DAILY MARKET INTELLIGENCE"
-    fw = draw.textlength(footer_txt, font=f_macro_en)
-    draw.text(((width - fw) / 2, height - 48), footer_txt, fill=gold, font=f_macro_en)
+            /* MACRO TABLE */
+            .macro-cols {{
+                display: grid; grid-template-columns: 110px 140px 1fr 140px 140px;
+                padding: 0 22px 12px 22px;
+                font-size: 14px; font-weight: 800; color: #64748b; letter-spacing: 1.5px;
+            }}
+            .macro-row {{
+                display: grid; grid-template-columns: 110px 140px 1fr 140px 140px;
+                align-items: center;
+                background: rgba(255, 255, 255, 0.035);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 16px;
+                padding: 18px 22px;
+                margin-bottom: 12px;
+            }}
+            .m-time {{ font-size: 22px; font-weight: 800; color: #f8fafc; }}
+            .badge {{
+                padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 800; letter-spacing: 1px;
+            }}
+            .badge-high {{
+                background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5);
+            }}
+            .badge-med {{
+                background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.5);
+            }}
+            .m-title {{ font-size: 21px; font-weight: 700; color: #ffffff; padding-right: 15px; }}
+            .m-forecast {{ font-size: 22px; font-weight: 800; color: #e5c158; text-align: center; }}
+            .m-prev {{ font-size: 20px; font-weight: 600; color: #94a3b8; text-align: center; }}
 
+            /* EARNINGS GRID */
+            .earnings-grid {{
+                display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
+            }}
+            .earn-row {{
+                display: flex; align-items: center; justify-content: space-between;
+                background: rgba(255, 255, 255, 0.035);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 18px;
+                padding: 14px 20px;
+                margin-bottom: 14px;
+            }}
+            .major-card {{
+                background: linear-gradient(90deg, rgba(212, 175, 55, 0.12) 0%, rgba(255, 255, 255, 0.03) 100%);
+                border: 1px solid rgba(212, 175, 55, 0.4);
+            }}
+            .earn-left {{ display: flex; align-items: center; gap: 16px; }}
+            .ticker-logo-wrap {{
+                width: 54px; height: 54px; border-radius: 50%;
+                background: #ffffff; padding: 6px;
+                display: flex; align-items: center; justify-content: center;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                overflow: hidden;
+            }}
+            .ticker-logo {{ width: 100%; height: 100%; object-fit: contain; }}
+            .ticker-fallback {{
+                width: 100%; height: 100%; border-radius: 50%;
+                background: #1e293b; color: #e5c158;
+                font-size: 24px; font-weight: 900;
+                align-items: center; justify-content: center;
+            }}
+            .ticker-sym {{ font-size: 24px; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; }}
+            .star {{ color: #e5c158; font-size: 20px; }}
+            .ticker-name {{ font-size: 15px; font-weight: 600; color: #94a3b8; margin-top: 2px; }}
+            .earn-eps {{
+                text-align: right;
+                background: rgba(0, 0, 0, 0.3);
+                padding: 8px 16px; border-radius: 12px;
+                border: 1px solid rgba(255,255,255,0.06);
+            }}
+            .eps-label {{ display: block; font-size: 11px; font-weight: 800; color: #64748b; letter-spacing: 1px; }}
+            .eps-val {{ font-size: 20px; font-weight: 800; color: #f8fafc; }}
+
+            .empty-state {{
+                text-align: center; padding: 55px 20px;
+                font-size: 20px; font-weight: 600; color: #64748b;
+                background: rgba(255,255,255,0.015); border-radius: 16px;
+            }}
+            .footer {{
+                text-align: center; margin-top: 10px;
+                font-size: 15px; font-weight: 800; color: #64748b; letter-spacing: 3px;
+            }}
+            .footer span {{ color: #e5c158; }}
+        </style>
+    </head>
+    <body>
+        <div class="glow-top"></div>
+
+        <!-- HEADER -->
+        <div class="header">
+            <div class="header-left">
+                {logo_html}
+                <div class="title-group">
+                    <h1>ILAN.KUV VIP</h1>
+                    <p>Wall Street Daily Briefing &bull; Macro &amp; Earnings</p>
+                </div>
+            </div>
+            <div class="date-box">
+                <div class="date-day">{day_name}</div>
+                <div class="date-str">{date_display}</div>
+            </div>
+        </div>
+
+        <!-- MACRO CALENDAR -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><div class="gold-dot"></div> US ECONOMIC CALENDAR</div>
+                <div class="card-sub">ISRAEL TIME (GMT+2/3)</div>
+            </div>
+            <div class="macro-cols">
+                <div>TIME</div>
+                <div>IMPACT</div>
+                <div>EVENT</div>
+                <div style="text-align:center;">FORECAST</div>
+                <div style="text-align:center;">PREVIOUS</div>
+            </div>
+            {macro_rows}
+        </div>
+
+        <!-- EARNINGS -->
+        <div class="earnings-grid">
+            <div class="card" style="margin-bottom:0;">
+                <div class="card-header">
+                    <div class="card-title"><div class="gold-dot"></div> BEFORE OPEN (BMO)</div>
+                    <div class="card-sub">PRE-MARKET</div>
+                </div>
+                {bmo_html}
+            </div>
+
+            <div class="card" style="margin-bottom:0; border-top-color: rgba(56, 189, 248, 0.5);">
+                <div class="card-header">
+                    <div class="card-title"><div class="blue-dot"></div> AFTER CLOSE (AMC)</div>
+                    <div class="card-sub" style="color:#38bdf8;">AFTER-HOURS</div>
+                </div>
+                {amc_html}
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>ILAN.KUV</span> &bull; EXCLUSIVE TRADING COMMUNITY &bull; MARKET INTELLIGENCE
+        </div>
+    </body>
+    </html>
+    """
+
+def generate_poster(html_content):
     output_path = "morning_brief.png"
-    img.convert("RGB").save(output_path, quality=95)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1200, "height": 1450}, device_scale_factor=2)
+        page.set_content(html_content, wait_until="networkidle")
+        page.screenshot(path=output_path, full_page=True)
+        browser.close()
     return output_path
 
 def send_to_discord(image_path):
@@ -347,5 +406,6 @@ def send_to_discord(image_path):
 if __name__ == "__main__":
     macro = get_macro_events()
     bmo, amc = get_earnings()
-    img_file = create_image(macro, bmo, amc)
+    html = build_html(macro, bmo, amc)
+    img_file = generate_poster(html)
     send_to_discord(img_file)
