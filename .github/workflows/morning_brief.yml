@@ -17,11 +17,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Fonts and Libraries
+      - name: Install Playwright & Libraries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y fonts-dejavu-core fonts-freefont-ttf
-          pip install requests pytz Pillow python-bidi arabic-reshaper yfinance
+          pip install requests pytz playwright
+          playwright install chromium
 
       - name: Run script and send to Discord
         env:
