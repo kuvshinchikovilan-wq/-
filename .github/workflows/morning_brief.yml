@@ -17,8 +17,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install libraries
-        run: pip install requests pytz Pillow
+      - name: Install Fonts and Libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core fonts-freefont-ttf
+          pip install requests pytz Pillow python-bidi arabic-reshaper yfinance
 
       - name: Run script and send to Discord
         env:
