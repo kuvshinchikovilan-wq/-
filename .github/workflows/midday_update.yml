@@ -2,7 +2,6 @@ name: Mid-Day Market Update
 
 on:
   schedule:
-    # רץ בימים שני עד שישי בשעה 17:00 UTC (שזה 19:00/20:00 בערב שעון ישראל - אמצע המסחר)
     - cron: '0 17 * * 1-5'
   workflow_dispatch:
 
@@ -25,5 +24,5 @@ jobs:
 
       - name: Run script and send to Discord
         env:
-          DISCORD_WEBHOOK_MORNING: ${{ secrets.DISCORD_WEBHOOK_MORNING }}
+          DISCORD_WEBHOOK_MIDDAY: ${{ secrets.DISCORD_WEBHOOK_MIDDAY }}
         run: python midday_update.py
