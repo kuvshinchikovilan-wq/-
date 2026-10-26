@@ -1,0 +1,29 @@
+name: Mid-Day Market Update
+
+on:
+  schedule:
+    # רץ בימים שני עד שישי בשעה 17:00 UTC (שזה 19:00/20:00 בערב שעון ישראל - אמצע המסחר)
+    - cron: '0 17 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  send_midday:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Playwright & Libraries
+        run: |
+          pip install requests pytz yfinance playwright
+          playwright install chromium
+
+      - name: Run script and send to Discord
+        env:
+          DISCORD_WEBHOOK_MORNING: ${{ secrets.DISCORD_WEBHOOK_MORNING }}
+        run: python midday_update.py
