@@ -23,33 +23,29 @@ def analyze_ticker(symbol):
     try:
         t = yf.Ticker(symbol)
         df = t.history(period="6mo")
-        if df.empty or len(df) < 50:
+        if df.empty or len(df) < 20:
             return None
         
         curr_price = float(df["Close"].iloc[-1])
-        prev_price = float(df["Close"].iloc[-2])
-        pct_change = ((curr_price - prev_price) / prev_price) * 100
+        prev_price = float(df["Close"].iloc[-2]) if len(df) >= 2 else curr_price
+        pct_change = ((curr_price - prev_price) / prev_price) * 100 if prev_price > 0 else 0.0
         
-        sma_50 = float(df["Close"].rolling(50).mean().iloc[-1])
+        sma_50 = float(df["Close"].rolling(50).mean().iloc[-1]) if len(df) >= 50 else curr_price
         
-        # חישוב RSI
+        # חישוב RSI בטוח
         delta = df["Close"].diff()
         gain = (delta.where(delta > 0, 0)).rolling(14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
         rs = gain / loss
-        rsi = float((100 - (100 / (1 + rs))).iloc[-1])
+        rsi = float((100 - (100 / (1 + rs))).iloc[-1]) if not rs.empty and not rs.isna().iloc[-1] else 50.0
         
-        # חישוב רמות תמיכה והתנגדות דינמיות מתוך 3 חודשים האחרונים
+        # חישוב תמיכה והתנגדות דינמיות ובטוחות לחלוטין
         recent_df = df.tail(60)
-        resistance = float(recent_df["High"].max())
-        support = float(recent_df["Low"].min())
+        highs_near = recent_df[recent_df["High"] >= curr_price]["High"]
+        lows_near = recent_df[recent_df["Low"] <= curr_price]["Low"]
         
-        # התאמת תמיכה והתנגדות קרובות יותר למחיר הנוכחי
-        highs_near = recent_df[recent_df["High"] > curr_price]["High"]
-        lows_near = recent_df[recent_df["Low"] < curr_price]["Low"]
-        
-        near_resistance = float(highs_near.min()) if not highs_near.empty else resistance
-        near_support = float(lows_near.max()) if not lows_near.empty else support
+        near_resistance = float(highs_near.min()) if not highs_near.empty else float(curr_price * 1.03)
+        near_support = float(lows_near.max()) if not lows_near.empty else float(curr_price * 0.97)
 
         trend = "BULLISH (Uptrend)" if curr_price > sma_50 else "BEARISH (Downtrend)"
         
@@ -136,3 +132,72 @@ def build_ta_html(data):
             <div class="header-left">
                 <div class="t-logo-wrap">
                     <img src="{data['logo']}" onerror="this.style.display='none'" class="t-logo" />
+                </div>
+                <div class="title-group">
+                    <h1>${data['symbol']} TECHNICAL LEVELS</h1>
+                    <p>ILAN.KUV VIP QUANT TERMINAL</p>
+                </div>
+            </div>
+            <div class="price-box">
+                <div class="price">{data['price']}</div>
+                <div class="pct {cls}">{sign}{data['pct']:.2f}%</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <div class="card-label">50 SMA</div>
+                <div class="card-val">{data['sma50']}</div>
+            </div>
+            <div class="card">
+                <div class="card-label">RSI (14)</div>
+                <div class="card-val">{data['rsi']}</div>
+            </div>
+        </div>
+
+        <div class="levels-grid">
+            <div class="level-card">
+                <div class="card-label" style="color:#34d399;">SUPPORT (תמיכה)</div>
+                <div class="card-val" style="color:#34d399;">{data['support']}</div>
+            </div>
+            <div class="level-card">
+                <div class="card-label" style="color:#f87171;">RESISTANCE (התנגדות)</div>
+                <div class="card-val" style="color:#f87171;">{data['resistance']}</div>
+            </div>
+        </div>
+
+        <div class="trend-card">
+            <div class="trend-title">PRIMARY MARKET STRUCTURE</div>
+            <div class="trend-val">{data['trend']}</div>
+        </div>
+    </body>
+    </html>
+    """
+
+def generate_ta_poster(symbol):
+    data = analyze_ticker(symbol)
+    if not data:
+        return None
+    html = build_ta_html(data)
+    output_path = f"ta_{symbol}.png"
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1000, "height": 700}, device_scale_factor=2)
+        page.set_content(html, wait_until="networkidle")
+        page.screenshot(path=output_path, full_page=False)
+        browser.close()
+    return output_path
+
+def send_to_discord(symbol, image_path):
+    if not WEBHOOK_URL:
+        return
+    payload = {"content": f"📊 **ניתוח טכני ורמות מפתח לבקשתך עבור מניית ${symbol.upper()}:**"}
+    with open(image_path, "rb") as f:
+        files = {"file": (image_path, f, "image/png")}
+        requests.post(WEBHOOK_URL, data=payload, files=files)
+
+if __name__ == "__main__":
+    target_ticker = os.environ.get("TARGET_TICKER", "NVDA")
+    img = generate_ta_poster(target_ticker)
+    if img:
+        send_to_discord(target_ticker, img)
