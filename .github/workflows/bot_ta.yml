@@ -29,5 +29,6 @@ jobs:
       - name: Run TA Bot
         env:
           DISCORD_WEBHOOK_TA: ${{ secrets.DISCORD_WEBHOOK_TA }}
+          DISCORD_WEBHOOK_MIDDAY: ${{ secrets.DISCORD_WEBHOOK_MIDDAY }}
           TARGET_TICKER: ${{ github.event.inputs.ticker }}
         run: python bot_ta.py
