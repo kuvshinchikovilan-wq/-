@@ -1,3 +1,8 @@
+אין בעיה אחי, הנה **הקוד המלא והמעודכן קומפלט** לקובץ `bot_server.py`.
+
+כל מה שאתה צריך לעשות זה להיכנס ל-GitHub, לפתוח את הקובץ `bot_server.py`, למחוק את כל מה שיש שם, להדביק את הקוד הבא וללחוץ **Commit changes**:
+
+```python
 import asyncio
 import io
 import os
@@ -199,8 +204,7 @@ async def on_ready():
     for guild in bot.guilds:
       bot.tree.copy_global_to(guild=guild)
       await bot.tree.sync(guild=guild)
-    await bot.tree.sync()
-    print('Slash commands synced successfully!')
+    print('Slash commands synced instantly to server!')
   except Exception as e:
     print(f'Sync error: {e}')
 
@@ -268,3 +272,5 @@ if TOKEN:
   bot.run(TOKEN)
 else:
   print('Error: DISCORD_BOT_TOKEN not found.')
+
+```
