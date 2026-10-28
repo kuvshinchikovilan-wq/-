@@ -1,0 +1,33 @@
+name: On-Demand Technical Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticker:
+        description: 'Enter Stock Ticker (e.g. NVDA, AAPL, TSLA)'
+        required: true
+        default: 'NVDA'
+        type: string
+
+jobs:
+  run_ta:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Libraries
+        run: |
+          pip install requests pytz yfinance playwright
+          playwright install chromium
+
+      - name: Run TA Bot
+        env:
+          DISCORD_WEBHOOK_TA: ${{ secrets.DISCORD_WEBHOOK_MIDDAY }}
+          TARGET_TICKER: ${{ github.event.inputs.ticker }}
+        run: python bot_ta.py
