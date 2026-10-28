@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Libraries
         run: |
-          pip install requests pytz yfinance playwright
+          pip install requests pytz yfinance pandas numpy matplotlib playwright
           playwright install chromium
 
       - name: Run TA Bot
