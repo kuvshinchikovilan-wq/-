@@ -14,6 +14,8 @@ import pandas as pd
 import yfinance as yf
 
 matplotlib.use('Agg')
+# ביטול פירוש סימן $ כנוסחה מתמטית כדי למנוע ParseException כשיש שני מחירים בכותרת
+plt.rcParams['text.parse_math'] = False
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -70,7 +72,7 @@ def get_extended_hours_data(ticker_symbol: str, regular_close: float):
       ext_info['ext_change_pct'] = (
           (latest_price - regular_close) / regular_close
       ) * 100
-    # After-Hours: 16:00 to 20:00 NY Time (or weekend/overnight latest print after 16:00)
+    # After-Hours: 16:00 to 20:00 NY Time (or overnight latest print)
     elif ts_minutes >= 960 or current_minutes >= 960 or current_minutes < 240:
       if abs(latest_price - regular_close) / regular_close > 0.0005:
         ext_info['session'] = 'POST'
@@ -86,13 +88,12 @@ def get_extended_hours_data(ticker_symbol: str, regular_close: float):
 
 
 def calc_diagonal_trendlines(plot_df: pd.DataFrame):
-  """חישוב קווי מגמה אלכסוניים אמיתיים על בסיס נקודות קיצון (Swing Highs / Lows)"""
+  """חישוב קווי מגמה אלכסוניים על בסיס נקודות קיצון (Swing Highs / Lows)"""
   n = len(plot_df)
   x = np.arange(n)
   highs = plot_df['High'].values.astype(float)
   lows = plot_df['Low'].values.astype(float)
 
-  # איתור פסגות ושפלים מקומיים ב-70 הנרות האחרונים
   pivots_h = []
   pivots_l = []
   start_idx = max(3, n - 75)
@@ -143,12 +144,11 @@ def generate_ta_package(ticker_symbol: str):
   if len(df) < 25:
     return None, None
 
-  # חישוב ממוצעים נעים
   df['SMA50'] = df['Close'].rolling(window=50).mean()
   df['SMA100'] = df['Close'].rolling(window=100).mean()
   df['SMA200'] = df['Close'].rolling(window=200).mean()
 
-  # חישוב RSI (14) מדויק בשיטת Wilder (EWM)
+  # חישוב RSI (14) בשיטת Wilder
   delta = df['Close'].diff()
   gain = delta.clip(lower=0)
   loss = -1 * delta.clip(upper=0)
@@ -199,7 +199,9 @@ def generate_ta_package(ticker_symbol: str):
   recent_highs = plot_df['High'].nlargest(8).values
   recent_lows = plot_df['Low'].nsmallest(8).values
 
-  above_prices = sorted([float(h) for h in recent_highs if h > last_close * 1.003])
+  above_prices = sorted(
+      [float(h) for h in recent_highs if h > last_close * 1.003]
+  )
   below_prices = sorted(
       [float(l) for l in recent_lows if l < last_close * 0.997], reverse=True
   )
@@ -236,7 +238,6 @@ def generate_ta_package(ticker_symbol: str):
     for spine in ax.spines.values():
       spine.set_color('#1e2636')
 
-  # סימן מים יוקרתי במרכז הגרף
   ax1.text(
       0.5,
       0.5,
@@ -251,7 +252,6 @@ def generate_ta_package(ticker_symbol: str):
       zorder=1,
   )
 
-  # ציור נרות יפניים וווליום
   width = 0.62
   for idx, row in plot_df.iterrows():
     x = row['DateNum']
@@ -280,7 +280,6 @@ def generate_ta_package(ticker_symbol: str):
     ax1.add_patch(rect)
     ax2.bar(x, v, width=width, color=color, alpha=0.55, zorder=2)
 
-  # ממוצעים נעים
   if plot_df['SMA50'].notna().any():
     ax1.plot(
         plot_df['DateNum'],
@@ -309,7 +308,6 @@ def generate_ta_package(ticker_symbol: str):
         zorder=4,
     )
 
-  # שרטוט קווי מגמה אלכסוניים (על 55 הנרות האחרונים למראה נקי)
   trend_len = min(55, len(plot_df))
   ax1.plot(
       plot_df['DateNum'].values[-trend_len:],
@@ -332,7 +330,6 @@ def generate_ta_package(ticker_symbol: str):
       zorder=4,
   )
 
-  # הגדרת גבולות ציר ותוויות מחיר יוקרתיות בצד ימין
   x_max = plot_df['DateNum'].max() + 2
   ax1.set_xlim(plot_df['DateNum'].min() - 2, x_max + 15)
 
@@ -386,7 +383,7 @@ def generate_ta_package(ticker_symbol: str):
 
   ax2.set_ylabel('VOLUME', color='#7f8fa6', fontsize=8, fontweight='bold')
 
-  # ================= פאנל RSI (14) יוקרתי =================
+  # ================= פאנל RSI (14) =================
   rsi_series = plot_df['RSI'].values.astype(float)
   dates_num = plot_df['DateNum'].values
 
@@ -444,7 +441,7 @@ def generate_ta_package(ticker_symbol: str):
   header_right = f'CLOSE: ${last_close:.2f} ({sign}{pct_change:.2f}%)'
   if ext_info['ext_price'] is not None:
     ext_s = '+' if ext_info['ext_change_pct'] >= 0 else ''
-    header_right += f" | {ext_info['session']}: ${ext_info['ext_price']:.2f} ({ext_s}{ext_info['ext_change_pct']:.2f}%)"
+    header_right += f"  |  {ext_info['session']}: ${ext_info['ext_price']:.2f} ({ext_s}{ext_info['ext_change_pct']:.2f}%)"
 
   ax1.set_title(
       header_left,
@@ -519,7 +516,9 @@ def generate_ta_package(ticker_symbol: str):
           '🟢 **מגמה חיובית (Bullish):** המניה נסחרת מעל הממוצעים המרכזיים'
       )
     elif active_price < sma50_val and active_price < sma200_val:
-      trend_summary = '🔴 **מגמה שלילית (Bearish):** המניה נסחרת מתחת לממוצעים המרכזיים'
+      trend_summary = (
+          '🔴 **מגמה שלילית (Bearish):** המניה נסחרת מתחת לממוצעים המרכזיים'
+      )
     else:
       trend_summary = '🟡 **מגמה מעורבת / התכנסות:** המניה נסחרת בין הממוצעים הנעים'
   else:
@@ -530,7 +529,9 @@ def generate_ta_package(ticker_symbol: str):
   elif last_rsi <= 30:
     rsi_desc = f'**{last_rsi:.1f}** (מכירת יתר / Oversold – לחץ מוכרים קיצוני, פוטנציאל לריבאונד טכני)'
   elif last_rsi >= 55:
-    rsi_desc = f'**{last_rsi:.1f}** (מומנטום חיובי בשליטת קונים, עם מרווח להמשך תנועה)'
+    rsi_desc = (
+        f'**{last_rsi:.1f}** (מומנטום חיובי בשליטת קונים, עם מרווח להמשך תנועה)'
+    )
   elif last_rsi <= 45:
     rsi_desc = f'**{last_rsi:.1f}** (מומנטום חלש הנוטה למוכרים מתחת לקו ה-50)'
   else:
@@ -545,7 +546,6 @@ def generate_ta_package(ticker_symbol: str):
   else:
     channel_desc = 'מבנה התרחבות תנודתי'
 
-  # התאמת הטקסט למצב פרימרקט / אפטר מרקט
   if ext_info['ext_price'] is not None:
     ext_s = '+' if ext_info['ext_change_pct'] >= 0 else ''
     session_text = (
@@ -553,13 +553,13 @@ def generate_ta_package(ticker_symbol: str):
         f"המניה נסחרת כעת ב-**${ext_info['ext_price']:.2f}** ({ext_s}{ext_info['ext_change_pct']:.2f}% ביחס לסגירה ב-${last_close:.2f}). "
     )
     if ext_info['ext_price'] > r1:
-      session_text += f"⚠️ שים לב: המניה פורצת במסחר המורחב מעל רמת ההתנגדות $R1 (${r1:.2f}) – במידה ותחזיק מעליה בפתיחה, צפוי מומנטום חיובי חזק."
+      session_text += f'⚠️ שים לב: המניה פורצת במסחר המורחב מעל רמת ההתנגדות R1 (${r1:.2f}) – במידה ותחזיק מעליה בפתיחה, צפוי מומנטום חיובי חזק.'
     elif ext_info['ext_price'] < s1:
-      session_text += f"⚠️ שים לב: המניה נסחרת במסחר המורחב מתחת לתמיכה $S1 (${s1:.2f}) – סכנת שבירה בפתיחת המסחר."
+      session_text += f'⚠️ שים לב: המניה נסחרת במסחר המורחב מתחת לתמיכה S1 (${s1:.2f}) – סכנת שבירה בפתיחת המסחר.'
     else:
-      session_text += "המחיר נע בתוך טווח התמיכה וההתנגדות הקרוב."
+      session_text += 'המחיר נע בתוך טווח התמיכה וההתנגדות הקרוב.'
   else:
-    session_text = f"🕒 **מצב מסחר:** נתוני סגירה / מסחר רציף אחרון (**${last_close:.2f}**, {sign}{pct_change:.2f}%)."
+    session_text = f'🕒 **מצב מסחר:** נתוני סגירה / מסחר רציף אחרון (**${last_close:.2f}**, {sign}{pct_change:.2f}%).'
 
   embed_color = 0x00E676 if pct_change >= 0 else 0xFF3B5C
   embed = discord.Embed(
@@ -612,7 +612,6 @@ def generate_ta_package(ticker_symbol: str):
 async def on_ready():
   print(f'Logged in as {bot.user} (ID: {bot.user.id})')
   try:
-    # ניקוי פקודות כפולות מהשרת וסנכרון נקי וחדש
     for guild in bot.guilds:
       bot.tree.clear_commands(guild=guild)
       bot.tree.copy_global_to(guild=guild)
@@ -624,7 +623,10 @@ async def on_ready():
 
 @bot.tree.command(
     name='ta',
-    description='קבלת גרף פרימיום + ניתוח טכני כתוב, תרחישים וזיהוי פרימרקט (נשמר בפרטי)',
+    description=(
+        'קבלת גרף פרימיום + ניתוח טכני כתוב, תרחישים וזיהוי פרימרקט (נשמר'
+        ' בפרטי)'
+    ),
 )
 @app_commands.describe(ticker='סימול המניה באנגלית (למשל NVDA, AAPL, TSLA)')
 async def slash_ta(interaction: discord.Interaction, ticker: str):
@@ -642,7 +644,6 @@ async def slash_ta(interaction: discord.Interaction, ticker: str):
 
     file = discord.File(fp=buf, filename=f'{clean_ticker}_vip_ta.png')
 
-    # שליחה להודעה פרטית (DM) כדי שהגרף והניתוח יישארו שמורים למשתמש לתמיד!
     try:
       await interaction.user.send(embed=embed, file=file)
       await interaction.followup.send(
@@ -651,7 +652,6 @@ async def slash_ta(interaction: discord.Interaction, ticker: str):
           ephemeral=True,
       )
     except discord.Forbidden:
-      # אם המשתמש חסם הודעות פרטיות בדיסקורד, מציג לו את הגרף והניתוח ישירות בחדר
       buf.seek(0)
       fallback_file = discord.File(
           fp=buf, filename=f'{clean_ticker}_vip_ta.png'
@@ -701,7 +701,9 @@ async def prefix_ta(ctx: commands.Context, ticker: str = None):
       fallback_file = discord.File(
           fp=buf, filename=f'{clean_ticker}_vip_ta.png'
       )
-      await ctx.send(content=ctx.author.mention, embed=embed, file=fallback_file)
+      await ctx.send(
+          content=ctx.author.mention, embed=embed, file=fallback_file
+      )
 
   except Exception as e:
     await ctx.send(f'❌ שגיאה בהפקת הגרף: {e}', delete_after=12)
