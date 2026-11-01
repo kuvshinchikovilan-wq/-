@@ -2,9 +2,12 @@ name: Quantum Breakout Live Scanner
 
 on:
   schedule:
-    # רץ כל 30 דקות במהלך שעות המסחר בוול סטריט (13:30 עד 20:30 UTC, ימים ב'-ו')
-    - cron: '0,30 13-20 * * 1-5'
-  workflow_dispatch: # כפתור הפעלה ידנית לבדיקה מיידית
+    # רץ כל 30 דקות במהלך שעות המסחר בוול סטריט (ימים ב'-ו')
+    - cron: '0,30 14-21 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   scan:
@@ -18,14 +21,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Cache sent alerts today
-        uses: actions/cache@v4
-        with:
-          path: /tmp/sent_breakouts_today.json
-          key: breakout-cache-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            breakout-cache-${{ runner.os }}-
-
       - name: Install dependencies
         run: |
           pip install --upgrade pip
@@ -33,3 +28,11 @@ jobs:
 
       - name: Run Live Breakout Scanner
         run: python breakout_scanner.py
+
+      - name: Save sent tickers memory to repo
+        run: |
+          git config --global user.name "Quantum Breakout Bot"
+          git config --global user.email "bot@github.com"
+          git add sent_breakouts.json || true
+          git diff --staged --quiet || git commit -m "Update breakout memory cache [skip ci]"
+          git push || true
