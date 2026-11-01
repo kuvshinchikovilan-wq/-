@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install yfinance mplfinance pandas numpy requests
+          pip install six matplotlib yfinance mplfinance pandas numpy requests
 
       - name: Run Weekly Support Scanner
         run: python weekly_support_scanner.py
