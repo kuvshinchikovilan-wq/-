@@ -1,0 +1,27 @@
+name: Quantum Breakout Scanner
+
+on:
+  schedule:
+    # רץ אוטומטית בימים שני-שישי בשעה 21:05 UTC (מיד אחרי סגירת המסחר בארה"ב)
+    - cron: '5 21 * * 1-5'
+  workflow_dispatch: # מאפשר לך להפעיל ידנית בלחיצת כפתור לבדיקה
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install yfinance mplfinance pandas numpy requests
+
+      - name: Run Breakout Scanner
+        run: python breakout_scanner.py
