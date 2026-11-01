@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 # ==========================================
 # הגדרת ה-Webhook של חדר תמיכות סווינג שבועי
 # ==========================================
-SUPPORT_WEBHOOK_URL = "YOUR_WEEKLY_SUPPORT_WEBHOOK_HERE"
+SUPPORT_WEBHOOK_URL = "https://discord.com/api/webhooks/1566348940167618631/ftzZ2uUKohQwpx10aNFbM2joMny_18jyOEJmp1oORIpGv2DPcVxCwP2Y5t6_Vrfao7_l"
 
 # ==========================================
 # יקום נכסים חזקים בלבד (Blue Chips, מובילות שוק, מדדים וסחורות)
@@ -96,7 +96,6 @@ def detect_weekly_support_setup(df):
     curr = df.iloc[-1]
     close_price = float(curr['Close'])
     low_price = float(curr['Low'])
-    high_price = float(curr['High'])
 
     sma20 = float(curr['SMA20']) if not np.isnan(curr['SMA20']) else None
     sma50 = float(curr['SMA50']) if not np.isnan(curr['SMA50']) else None
@@ -106,7 +105,6 @@ def detect_weekly_support_setup(df):
     atr = float(curr['ATR']) if not np.isnan(curr['ATR']) else (close_price * 0.04)
 
     # 1. סינון "נכס חזק": חייב להיות במגמה ראשית עולה
-    # או מעל ממוצע 200 שבועי, או שממוצע 50 מעל ממוצע 200, ובשיפוע חיובי
     if sma200 and close_price < sma200 * 0.96:
         return None
     if sma50 and sma200 and sma50 < sma200:
@@ -116,7 +114,7 @@ def detect_weekly_support_setup(df):
     recent_high = float(df['High'].iloc[-26:].max())
     pullback_pct = ((recent_high - close_price) / recent_high) * 100
 
-    # אנחנו מחפשים מניה שירדה לפחות 6% מהשיא שלה (תיקון לסווינג) ועד 28%
+    # מניה שירדה בין 6% ל-28% מהשיא שלה (תיקון בריא לסווינג)
     if not (6.0 <= pullback_pct <= 28.0):
         return None
 
@@ -125,7 +123,6 @@ def detect_weekly_support_setup(df):
         return None
 
     # 4. איתור רמת התמיכה המשמעותית שהמניה בודקת כרגע
-    # בודקים גם ממוצעים נעים שבועיים מרכזיים וגם תמיכה אופקית מרמת שיא/שפל קודמת
     prev_pivot_support = float(df['Low'].iloc[-20:-3].min())
     
     candidates = []
@@ -144,8 +141,6 @@ def detect_weekly_support_setup(df):
     matched_support_price = None
 
     for name, level in candidates:
-        # בדיקה אם הנמוך השבועי או המחיר הנוכחי נמצאים בטווח נגיעה מהתמיכה (-1.2% עד +2.2%)
-        # והמחיר הנוכחי עדיין שומר מעל התמיכה (או ממש עליה)
         dist_from_close = ((close_price - level) / level) * 100
         dist_from_low = ((low_price - level) / level) * 100
 
@@ -159,8 +154,8 @@ def detect_weekly_support_setup(df):
 
     # חישוב רמות לעסקת הסווינג (יחס סיכוי/סיכון)
     invalidation_level = min(low_price * 0.97, matched_support_price - (0.85 * atr))
-    target_1 = close_price + (recent_high - close_price) * 0.6  # תיקון 60% חזרה לשיא
-    target_2 = recent_high  # חזרה לשיא השבועי האחרון
+    target_1 = close_price + (recent_high - close_price) * 0.6
+    target_2 = recent_high
 
     risk_pct = ((close_price - invalidation_level) / close_price) * 100
     reward_pct = ((target_2 - close_price) / close_price) * 100
@@ -189,7 +184,7 @@ def detect_weekly_support_setup(df):
 # יצירת גרף שבועי מעוצב עם סימון אזור התמיכה
 # ==========================================
 def generate_support_chart(df, ticker, info):
-    plot_df = df.tail(65).copy()  # כשנה ורבע של נרות שבועיים
+    plot_df = df.tail(65).copy()
 
     mc = mpf.make_marketcolors(
         up='#00E676', down='#FF1744',
@@ -214,7 +209,6 @@ def generate_support_chart(df, ticker, info):
         }
     )
 
-    # חץ תכלת/טורקיז מתחת לנר השבועי שנשען על התמיכה
     marker_series = pd.Series(np.nan, index=plot_df.index)
     marker_series.iloc[-1] = plot_df['Low'].iloc[-1] * 0.965
 
@@ -287,10 +281,6 @@ def generate_support_chart(df, ticker, info):
 # שליחת כרטיסיית הניתוח לחדר הסווינג בדיסקורד
 # ==========================================
 def send_support_alert(ticker, info, chart_buf):
-    if not SUPPORT_WEBHOOK_URL or "YOUR_" in SUPPORT_WEBHOOK_URL:
-        print("Support Webhook URL is not set. Skipping.")
-        return
-
     description = (
         f"**מחיר נוכחי:** `${info['close']:.2f}`  •  **תיקון מהשיא:** `-{info['pullback_pct']:.1f}%`  •  **טווח:** `גרף שבועי (1W)`\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -310,7 +300,7 @@ def send_support_alert(ticker, info, chart_buf):
 
     embed = {
         "title": f"🛡️ נכס חזק בתמיכה שבועית (סטאפ סווינג) | ${ticker}",
-        "color": 58879,  # כחול-טורקיז יוקרתי שמבדיל אותו מחדר הפריצות
+        "color": 58879,
         "description": description,
         "image": {"url": f"attachment://{ticker}_weekly_support.png"},
         "footer": {
