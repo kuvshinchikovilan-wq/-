@@ -1,10 +1,10 @@
-name: Quantum Breakout Scanner
+name: Quantum Breakout Live Scanner
 
 on:
   schedule:
-    # רץ אוטומטית בימים שני-שישי בשעה 21:05 UTC (מיד אחרי סגירת המסחר בארה"ב)
-    - cron: '5 21 * * 1-5'
-  workflow_dispatch: # מאפשר לך להפעיל ידנית בלחיצת כפתור לבדיקה
+    # רץ כל 30 דקות במהלך שעות המסחר בוול סטריט (13:30 עד 20:30 UTC, ימים ב'-ו')
+    - cron: '0,30 13-20 * * 1-5'
+  workflow_dispatch: # כפתור הפעלה ידנית לבדיקה מיידית
 
 jobs:
   scan:
@@ -18,10 +18,18 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache sent alerts today
+        uses: actions/cache@v4
+        with:
+          path: /tmp/sent_breakouts_today.json
+          key: breakout-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            breakout-cache-${{ runner.os }}-
+
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install yfinance mplfinance pandas numpy requests
 
-      - name: Run Breakout Scanner
+      - name: Run Live Breakout Scanner
         run: python breakout_scanner.py
