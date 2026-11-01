@@ -7,43 +7,77 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import mplfinance as mpf
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ==========================================
-# הגדרות מערכת ו-Webhook
+# הגדרות 2 החדרים בדיסקורד (Webhooks)
 # ==========================================
-# מושך את ה-Webhook מהגדרות ה-Secrets בגיטהאב (או שתדביק ישירות במירכאות לבדיקה)
-DISCORD_WEBHOOK_URL = os.getenv("BREAKOUT_WEBHOOK_URL", "https://discord.com/api/webhooks/1566315887286296596/meUNLSkQiAd3QDPoB8NmbXQ5iy3wK23FqInNtNoaoQSIl7Co6Xuk7XlHsBCmnaG5Cs-w")
+# תדביק כאן את ה-Webhook של חדר פריצות יומי:
+DAILY_WEBHOOK_URL = "YOUR_DAILY_WEBHOOK_URL_HERE"
 
-# יקום הסריקה: מניות מומנטום, שבבים, טכנולוגיה, פיננסים ומדדים מובילים
+# תדביק כאן את ה-Webhook של חדר פריצות שבועי:
+WEEKLY_WEBHOOK_URL = "YOUR_WEEKLY_WEBHOOK_URL_HERE"
+
+# ==========================================
+# יקום מניות מורחב (~170 מניות סחירות ומומנטום)
+# ==========================================
 WATCHLIST = [
-    # Mega Caps & Tech
-    "NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "NFLX", "AVGO", "ORCL",
-    # Semiconductors & AI
-    "AMD", "ARM", "SMCI", "MU", "TSM", "ASML", "QCOM", "INTC", "MRVL", "AMAT", "LRCX", "KLAC",
-    # High-Beta Growth & Cyber & Crypto Proxies
-    "PLTR", "CRWD", "PANW", "SNOW", "DDOG", "NET", "SHOP", "UBER", "COIN", "MSTR", "MARA", "HOOD", "SOFI", "AFRM", "UPST",
-    # Financials, Industrials & Healthcare
-    "JPM", "GS", "MS", "V", "MA", "AXP", "CAT", "GE", "LLY", "UNH", "ISRG", "XOM", "CVX",
-    # Key ETFs
-    "SPY", "QQQ", "IWM", "SOXX", "SMH", "XLF", "XLE", "ARKK", "IGV"
+    # Mega Caps & Tech Giants
+    "NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "NFLX", "AVGO", "ORCL", "CRM", "ADBE", "CSCO", "IBM", "INTU", "NOW",
+    # Semiconductors & AI Hardware
+    "AMD", "ARM", "SMCI", "MU", "TSM", "ASML", "QCOM", "INTC", "MRVL", "AMAT", "LRCX", "KLAC", "TXN", "ADI", "NXPI", "ON", "MPWR", "TER", "ENTG", "VRT", "DELL", "HPE", "ANET",
+    # Cyber, Cloud & Software Momentum
+    "PLTR", "CRWD", "PANW", "FTNT", "ZS", "OKTA", "S", "CYBR", "SNOW", "DDOG", "NET", "MDB", "TEAM", "HUBS", "WDAY", "TTD", "APP", "U", "IOT", "DUOL", "CFLT", "PATH", "DOCN", "GTLB",
+    # Crypto, Fintech & High-Beta Growth
+    "COIN", "MSTR", "MARA", "RIOT", "CLSK", "IREN", "CORZ", "WULF", "HOOD", "SOFI", "AFRM", "UPST", "SQ", "PYPL", "NU", "MELI", "SE", "SHOP", "UBER", "LYFT", "ABNB", "DASH", "ROKU", "RBLX", "RDDT", "CVNA", "DKNG", "HIMS", "CELH", "ONON", "DECK",
+    # EV, Space, Clean Energy & Next-Gen
+    "RIVN", "LCID", "NIO", "XPEV", "LI", "RKLB", "ASTS", "LUNR", "JOBY", "ACHR", "IONQ", "RGTI", "QBTS", "SMR", "OKLO", "CEG", "VST", "FSLR", "ENPH", "SEDG", "ALB",
+    # Financials & Wall Street
+    "JPM", "GS", "MS", "BAC", "C", "WFC", "BLK", "BX", "KKR", "APO", "V", "MA", "AXP", "SPGI", "ICE", "CME",
+    # Retail, Consumer & Entertainment
+    "WMT", "COST", "TGT", "HD", "LOW", "NKE", "SBUX", "MCD", "CMG", "DIS", "SPOT", "LIVE", "LULU", "CROX", "ELF",
+    # Healthcare, Biotech & Pharma
+    "LLY", "NVO", "UNH", "ISRG", "VRTX", "REGN", "AMGN", "GILD", "MRNA", "BNTX", "VKTX", "ABBV", "PFE", "MRK", "TMO", "DHR", "DXCM",
+    # Industrials, Defense, Energy & Commodities
+    "CAT", "DE", "GE", "BA", "LMT", "RTX", "NOC", "GD", "AXON", "URI", "PWR", "ETN", "PH", "XOM", "CVX", "COP", "SLB", "OXY", "HAL", "FCX", "NEM", "GOLD", "AA", "CCJ",
+    # Key Market & Sector ETFs
+    "SPY", "QQQ", "IWM", "DIA", "SOXX", "SMH", "IGV", "XLF", "XLE", "XLV", "XLI", "XBI", "ARKK", "GDX", "TAN", "URA", "IBIT"
 ]
 
+# קובץ זיכרון פנימי למניעת שליחה כפולה של אותה מניה באותו יום
+CACHE_FILE = "/tmp/sent_breakouts_today.json"
+
+def load_sent_cache():
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r") as f:
+                data = json.load(f)
+                if data.get("date") == today_str:
+                    return set(data.get("sent", []))
+        except Exception:
+            pass
+    return set()
+
+def save_sent_cache(sent_set):
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.load
+            json.dump({"date": today_str, "sent": list(sent_set)}, f)
+    except Exception:
+        pass
+
 # ==========================================
-# פונקציות חישוב אינדיקטורים טכניים
+# חישוב אינדיקטורים טכניים
 # ==========================================
 def calculate_indicators(df):
     df = df.copy()
-    # ממוצעים נעים (קומנדו + קצר טווח)
     df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['SMA50'] = df['Close'].rolling(window=50).mean()
-    df['SMA100'] = df['Close'].rolling(window=100).mean()
     df['SMA200'] = df['Close'].rolling(window=200).mean()
-
-    # ממוצע ווליום (20 נרות)
     df['Vol_SMA20'] = df['Volume'].rolling(window=20).mean()
 
-    # חישוב RSI (Wilder's Smoothing - 14)
     delta = df['Close'].diff()
     gain = delta.where(delta > 0, 0.0)
     loss = -delta.where(delta < 0, 0.0)
@@ -52,7 +86,6 @@ def calculate_indicators(df):
     rs = avg_gain / avg_loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    # חישוב ATR (14) למדידת תנודתיות ויעדים
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
@@ -63,64 +96,55 @@ def calculate_indicators(df):
     return df
 
 # ==========================================
-# לוגיקת זיהוי פריצת התנגדות (יומי / שבועי)
+# לוגיקת זיהוי פריצה חיה (Live Intraday & Weekly)
 # ==========================================
-def detect_breakout(df, timeframe="1D", lookback=55):
-    if len(df) < lookback + 10:
+def detect_live_breakout(df, timeframe="1D", lookback=25):
+    if len(df) < lookback + 5:
         return None
 
     curr = df.iloc[-1]
     prev = df.iloc[-2]
 
-    # חלון בדיקת ההתנגדות (ללא הנר האחרון שפורץ)
+    # רמת ההתנגדות של X הנרות הקודמים (ללא הנר הנוכחי)
     window = df.iloc[-(lookback + 1):-1]
     resistance_price = float(window['High'].max())
     resistance_date = window['High'].idxmax()
 
-    close_price = float(curr['Close'])
+    current_price = float(curr['Close'])
+    current_high = float(curr['High'])
     prev_close = float(prev['Close'])
     open_price = float(curr['Open'])
-    high_price = float(curr['High'])
     low_price = float(curr['Low'])
-    
+
     curr_vol = float(curr['Volume'])
     avg_vol = float(curr['Vol_SMA20']) if curr['Vol_SMA20'] > 0 else 1.0
     rvol = (curr_vol / avg_vol) * 100
 
-    rsi = float(curr['RSI'])
-    atr = float(curr['ATR']) if not np.isnan(curr['ATR']) else (close_price * 0.025)
+    rsi = float(curr['RSI']) if not np.isnan(curr['RSI']) else 55.0
+    atr = float(curr['ATR']) if not np.isnan(curr['ATR']) else (current_price * 0.025)
     ema20 = float(curr['EMA20'])
-    sma50 = float(curr['SMA50'])
+    sma50 = float(curr['SMA50']) if not np.isnan(curr['SMA50']) else ema20
     sma200 = float(curr['SMA200']) if not np.isnan(curr['SMA200']) else sma50
 
-    # בדיקת אחוז סגירה בחלק העליון של הנר (כדי לסנן פתילים עליונים / Fakeouts)
-    candle_range = high_price - low_price
-    close_strength = ((close_price - low_price) / candle_range) if candle_range > 0 else 0.5
+    # תנאים גמישים שמייצרים תוכן חי בזמן המסחר:
+    # 1. המחיר הנוכחי (או הגבוה היומי) פרץ את רמת ההתנגדות, והמחיר כרגע מחזיק מעליה
+    # 2. הנר הקודם סגר מתחת להתנגדות (כלומר הפריצה מתרחשת עכשיו!)
+    # 3. המניה חיובית היום (ירוקה) ובעלייה של לפחות 1.2%
+    change_pct = ((current_price - prev_close) / prev_close) * 100
+    is_breaking_now = (current_price > resistance_price) and (prev_close <= resistance_price * 1.003)
+    is_green_momentum = (current_price > open_price) and (change_pct >= 1.2)
 
-    # תנאי סף לפריצה איכותית:
-    # 1. הנר הנוכחי נסגר מעל ההתנגדות הקריטית
-    # 2. הנר הקודם היה מתחת או בדיוק על ההתנגדות (פריצה טרייה היום!)
-    # 3. נר ירוק (סגירה מעל פתיחה) שנסגר ב-40% העליונים של הטווח שלו
-    # 4. נפח מסחר מעל 125% מהממוצע
-    # 5. מחיר מעל ממוצע 20 ו-50, ו-RSI בטווח בריא (52 עד 82)
-    is_fresh_breakout = (close_price > resistance_price * 1.001) and (prev_close <= resistance_price * 1.005)
-    is_strong_candle = (close_price > open_price) and (close_strength >= 0.60)
-    is_high_volume = rvol >= 125.0
-    is_bullish_trend = (close_price > ema20) and (close_price > sma50) and (52 <= rsi <= 82)
-
-    if is_fresh_breakout and is_strong_candle and is_high_volume and is_bullish_trend:
-        change_pct = ((close_price - prev_close) / prev_close) * 100
-        breakout_pct = ((close_price - resistance_price) / resistance_price) * 100
-        
-        # חישוב רמות ניהול סיכונים מבוסס ATR
-        invalidation_level = min(low_price, resistance_price - (0.5 * atr))
-        target_1 = close_price + (1.5 * atr)
-        target_2 = close_price + (3.0 * atr)
+    if is_breaking_now and is_green_momentum:
+        breakout_pct = ((current_price - resistance_price) / resistance_price) * 100
+        invalidation_level = min(low_price, resistance_price - (0.6 * atr))
+        target_1 = current_price + (1.5 * atr)
+        target_2 = current_price + (3.0 * atr)
 
         return {
             "timeframe": timeframe,
             "lookback": lookback,
-            "close": close_price,
+            "close": current_price,
+            "high": current_high,
             "change_pct": change_pct,
             "resistance": resistance_price,
             "resistance_date": resistance_date.strftime("%d/%m/%Y"),
@@ -133,8 +157,7 @@ def detect_breakout(df, timeframe="1D", lookback=55):
             "sma200": sma200,
             "invalidation": invalidation_level,
             "target_1": target_1,
-            "target_2": target_2,
-            "close_strength": close_strength * 100
+            "target_2": target_2
         }
     return None
 
@@ -142,7 +165,7 @@ def detect_breakout(df, timeframe="1D", lookback=55):
 # יצירת גרף מעוצב (Ilan VIP Dark Theme)
 # ==========================================
 def generate_breakout_chart(df, ticker, info):
-    plot_bars = 75 if info["timeframe"] == "1D" else 52
+    plot_bars = 65 if info["timeframe"] == "1D" else 52
     plot_df = df.tail(plot_bars).copy()
 
     mc = mpf.make_marketcolors(
@@ -150,7 +173,7 @@ def generate_breakout_chart(df, ticker, info):
         edge='inherit', wick='inherit',
         volume={'up': '#00E676', 'down': '#FF1744'}
     )
-    
+
     style = mpf.make_mpf_style(
         base_mpf_style='nightclouds',
         marketcolors=mc,
@@ -168,7 +191,7 @@ def generate_breakout_chart(df, ticker, info):
         }
     )
 
-    # הוספת סימון חץ ירוק מתחת לנר הפריצה האחרון
+    # חץ ירוק בולט מתחת לנר הפורץ
     marker_series = pd.Series(np.nan, index=plot_df.index)
     marker_series.iloc[-1] = plot_df['Low'].iloc[-1] * 0.975
 
@@ -183,14 +206,13 @@ def generate_breakout_chart(df, ticker, info):
     if not plot_df['SMA200'].isna().all():
         apds.append(mpf.make_addplot(plot_df['SMA200'], color='#FF1744', width=1.6, panel=0))
 
-    # קווי RSI (30/70)
     rsi_70 = pd.Series(70, index=plot_df.index)
     rsi_30 = pd.Series(30, index=plot_df.index)
     apds.append(mpf.make_addplot(rsi_70, panel=2, color='#5D606B', linestyle=':', width=0.8))
     apds.append(mpf.make_addplot(rsi_30, panel=2, color='#5D606B', linestyle=':', width=0.8))
 
-    tf_label = "Daily (1D)" if info["timeframe"] == "1D" else "Weekly (1W)"
-    
+    tf_label = "DAILY (1D) LIVE BREAKOUT" if info["timeframe"] == "1D" else "WEEKLY (1W) MACRO BREAKOUT"
+
     buf = io.BytesIO()
     fig, axes = mpf.plot(
         plot_df,
@@ -211,13 +233,11 @@ def generate_breakout_chart(df, ticker, info):
         returnfig=True
     )
 
-    # כותרת עליונה מקצועית
     axes[0].set_title(
-        f"{ticker} • {tf_label} Breakout Alert  |  Close: ${info['close']:.2f} (+{info['change_pct']:.2f}%)  |  RVOL: {info['rvol']:.0f}%",
+        f"{ticker} • {tf_label}  |  Price: ${info['close']:.2f} (+{info['change_pct']:.2f}%)  |  RSI: {info['rsi']:.1f}",
         color='white', fontsize=13, fontweight='bold', pad=14, loc='left'
     )
 
-    # מקרא קווים בפינה השמאלית העליונה
     legend_text = (
         f"── Resistance Broken: ${info['resistance']:.2f} (Gold)\n"
         f"── Target 1: ${info['target_1']:.2f} (Cyan)\n"
@@ -230,7 +250,6 @@ def generate_breakout_chart(df, ticker, info):
         bbox=dict(boxstyle='round,pad=0.5', facecolor='#131722', edgecolor='#2A2E39', alpha=0.88)
     )
 
-    # חותמת מים במרכז הגרף
     fig.text(
         0.5, 0.56, 'Ilan.Kuv  |  Quantum VIP',
         fontsize=30, color='white', ha='center', va='center', alpha=0.07, weight='bold'
@@ -241,103 +260,115 @@ def generate_breakout_chart(df, ticker, info):
     return buf
 
 # ==========================================
-# שליחת הניתוח המלא והגרף לדיסקורד
+# שליחת ההתראה לחדר המתאים בדיסקורד
 # ==========================================
-def send_discord_alert(ticker, info, chart_buf):
-    tf_heb = "גרף יומי (1D)" if info["timeframe"] == "1D" else "גרף שבועי (1W)"
-    period_heb = f"{info['lookback']} ימי המסחר" if info["timeframe"] == "1D" else f"{info['lookback']} השבועות"
+def send_discord_alert(ticker, info, chart_buf, webhook_url):
+    if not webhook_url or "YOUR_" in webhook_url:
+        print(f"Webhook not configured for {info['timeframe']}. Skipping send.")
+        return
 
-    trend_status = "מעל כל הממוצעים המרכזיים (20, 50, 200) - מבנה שורי מלא" if info['close'] > info['sma200'] else "מעל ממוצעים 20 ו-50 (בבניית מומנטום)"
+    is_daily = info["timeframe"] == "1D"
+    tf_heb = "גרף יומי (1D)" if is_daily else "גרף שבועי (1W)"
+    period_heb = f"{info['lookback']} ימי המסחר" if is_daily else f"{info['lookback']} השבועות"
+    embed_color = 65416 if is_daily else 16766720  # ירוק זוהר ליומי, זהב יוקרתי לשבועי
+    icon = "🚀" if is_daily else "💎"
+
+    trend_status = "מעל הממוצעים המרכזיים (20, 50, 200) - מגמה שורית" if info['close'] > info['sma200'] else "מומנטום חיובי מעל ממוצע 20"
 
     description = (
-        f"**מחיר סגירה:** `${info['close']:.2f}` (`+{info['change_pct']:.2f}%`)  •  **טווח זמן:** `{tf_heb}`\n"
+        f"**מחיר בזמן אמת:** `${info['close']:.2f}` (`+{info['change_pct']:.2f}%`)  •  **טווח:** `{tf_heb}`\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"**📐 הסטאפ הטכני (The Setup):**\n"
-        f"המניה פרצה וסגרה מעל רמת ההתנגדות הקריטית ב-**`${info['resistance']:.2f}`** "
-        f"(שיא מאז `{info['resistance_date']}` - {period_heb} האחרונים). "
-        f"נר הפריצה נסגר ב-`{info['close_strength']:.0f}%` העליונים של הטווח שלו, מה שמעיד על שליטה של קונים ללא היצע משמעותי בסגירה.\n\n"
-        f"**📊 אינדיקטורים ואישורי כסף חכם:**\n"
-        f"• **נפח מסחר יחסי (RVOL):** `{info['rvol']:.0f}%` ביחס לממוצע 20 ימים (כניסת ווליום מוסדי)\n"
-        f"• **מדד עוצמה יחסית (RSI 14):** `{info['rsi']:.1f}` (מומנטום חיובי חזק)\n"
-        f"• **מבנה ממוצעים:** {trend_status}\n"
-        f"• **תנודתיות יומית ממוצעת (ATR):** `${info['atr']:.2f}`\n\n"
-        f"**🎯 רמות מפתח למעקב (Key Levels):**\n"
-        f"• **אזור הפריצה (הופך לתמיכה - קו זהב):** `${info['resistance']:.2f}`\n"
-        f"• **אזור שלילת הסטאפ (Invalidation - קו אדום):** סגירה מתחת ל-`${info['invalidation']:.2f}`\n"
-        f"• **יעד טכני 1 (1.5x ATR - קו תכלת):** `${info['target_1']:.2f}`\n"
-        f"• **יעד טכני 2 (3.0x ATR):** `${info['target_2']:.2f}`"
+        f"**📐 הסטאפ הטכני (Live Breakout Setup):**\n"
+        f"המניה פורצת כעת בזמן אמת את רמת ההתנגדות ב-**`${info['resistance']:.2f}`** "
+        f"(שיא של {period_heb} האחרונים מאז `{info['resistance_date']}`). "
+        f"המחיר נסחר כעת ב-`+{info['breakout_pct']:.2f}%` מעל נקודת הפריצה.\n\n"
+        f"**📊 נתוני מומנטום ואינדיקטורים:**\n"
+        f"• **מדד עוצמה (RSI 14):** `{info['rsi']:.1f}`\n"
+        f"• **קצב נפח מסחר (RVOL):** `{info['rvol']:.0f}%` ביחס לממוצע\n"
+        f"• **מיקום ממוצעים:** {trend_status}\n"
+        f"• **טווח תנועה ממוצע (ATR):** `${info['atr']:.2f}`\n\n"
+        f"**🎯 רמות מפתח על הגרף:**\n"
+        f"• **קו הפריצה (הופך לתמיכה - זהב):** `${info['resistance']:.2f}`\n"
+        f"• **רמת שלילת הסטאפ (Invalidation - אדום):** `${info['invalidation']:.2f}`\n"
+        f"• **יעד טכני 1 (תכלת):** `${info['target_1']:.2f}`\n"
+        f"• **יעד טכני 2:** `${info['target_2']:.2f}`"
     )
 
     embed = {
-        "title": f"🚀 התראת פריצת התנגדות קריטית | ${ticker} ({tf_heb})",
-        "color": 59766,  # ירוק אזמרגד יוקרתי
+        "title": f"{icon} פריצת התנגדות בזמן אמת | ${ticker} ({tf_heb})",
+        "color": embed_color,
         "description": description,
-        "image": {"url": f"attachment://{ticker}_breakout.png"},
+        "image": {"url": f"attachment://{ticker}_{info['timeframe']}.png"},
         "footer": {
-            "text": f"Ilan VIP • Quantum Breakout Scanner • {datetime.now().strftime('%d/%m/%Y %H:%M')} | סקירה טכנית בלבד ואינה המלצה"
+            "text": f"Ilan VIP • Quantum Breakout Live • {datetime.now().strftime('%d/%m/%Y %H:%M')} | אינו מהווה המלצה"
         }
     }
 
     payload = {
-        "username": "Quantum Breakout Bot | Ilan VIP",
+        "username": "Quantum Breakout Scanner | Ilan VIP",
         "embeds": [embed]
     }
 
     files = {
-        "file": (f"{ticker}_breakout.png", chart_buf, "image/png")
+        "file": (f"{ticker}_{info['timeframe']}.png", chart_buf, "image/png")
     }
 
-    response = requests.post(
-        DISCORD_WEBHOOK_URL,
-        data={"payload_json": json.dumps(payload)},
-        files=files,
-        timeout=30
-    )
-    return response.status_code
+    requests.post(webhook_url, data={"payload_json": json.dumps(payload)}, files=files, timeout=30)
 
 # ==========================================
-# פונקציית הרצה ראשית (סריקת יומי + שבועי)
+# פונקציית הרצה ראשית (מפוצלת ל-2 החדרים)
 # ==========================================
 def run_scanner():
-    print(f"Starting Quantum Breakout Scanner on {len(WATCHLIST)} tickers...")
-    alerts_sent = 0
+    print(f"Starting Live Breakout Scanner on {len(WATCHLIST)} stocks...")
+    sent_today = load_sent_cache()
+    daily_count = 0
+    weekly_count = 0
 
     for ticker in WATCHLIST:
         try:
-            # 1. בדיקת גרף יומי (1D)
-            df_daily = yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
-            if isinstance(df_daily.columns, pd.MultiIndex):
-                df_daily.columns = df_daily.columns.get_level_values(0)
+            # --- 1. סריקת גרף יומי (לחדר פריצות יומי) ---
+            daily_key = f"{ticker}_1D"
+            if daily_key not in sent_today and daily_count < 6: # מקסימום 6 התראות בסבב אחד כדי שיראה טבעי
+                df_d = yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
+                if isinstance(df_d.columns, pd.MultiIndex):
+                    df_d.columns = df_d.columns.get_level_values(0)
 
-            if not df_daily.empty:
-                df_daily = calculate_indicators(df_daily)
-                daily_breakout = detect_breakout(df_daily, timeframe="1D", lookback=50)
-                if daily_breakout:
-                    print(f"[!] Daily Breakout detected: {ticker}")
-                    chart = generate_breakout_chart(df_daily, ticker, daily_breakout)
-                    send_discord_alert(ticker, daily_breakout, chart)
-                    alerts_sent += 1
-                    time.sleep(2)
+                if not df_d.empty:
+                    df_d = calculate_indicators(df_d)
+                    # בודק פריצה של 25 ימי מסחר אחרונים (או 50)
+                    b_daily = detect_live_breakout(df_d, timeframe="1D", lookback=25)
+                    if b_daily:
+                        print(f"[!] LIVE DAILY Breakout: {ticker}")
+                        chart = generate_breakout_chart(df_d, ticker, b_daily)
+                        send_discord_alert(ticker, b_daily, chart, DAILY_WEBHOOK_URL)
+                        sent_today.add(daily_key)
+                        daily_count += 1
+                        time.sleep(2)
 
-            # 2. בדיקת גרף שבועי (1W) - רק בימי שישי/סופ"ש או פריצה שבועית
-            df_weekly = yf.download(ticker, period="3y", interval="1wk", progress=False, auto_adjust=True)
-            if isinstance(df_weekly.columns, pd.MultiIndex):
-                df_weekly.columns = df_weekly.columns.get_level_values(0)
+            # --- 2. סריקת גרף שבועי (לחדר פריצות שבועי) ---
+            weekly_key = f"{ticker}_1W"
+            if weekly_key not in sent_today and weekly_count < 4:
+                df_w = yf.download(ticker, period="3y", interval="1wk", progress=False, auto_adjust=True)
+                if isinstance(df_w.columns, pd.MultiIndex):
+                    df_w.columns = df_w.columns.get_level_values(0)
 
-            if not df_weekly.empty:
-                df_weekly = calculate_indicators(df_weekly)
-                weekly_breakout = detect_breakout(df_weekly, timeframe="1W", lookback=26)
-                if weekly_breakout:
-                    print(f"[!] Weekly Breakout detected: {ticker}")
-                    chart = generate_breakout_chart(df_weekly, ticker, weekly_breakout)
-                    send_discord_alert(ticker, weekly_breakout, chart)
-                    alerts_sent += 1
-                    time.sleep(2)
+                if not df_w.empty:
+                    df_w = calculate_indicators(df_w)
+                    # בודק פריצה של 16 שבועות אחרונים (כ-4 חודשים)
+                    b_weekly = detect_live_breakout(df_w, timeframe="1W", lookback=16)
+                    if b_weekly:
+                        print(f"[!] LIVE WEEKLY Breakout: {ticker}")
+                        chart = generate_breakout_chart(df_w, ticker, b_weekly)
+                        send_discord_alert(ticker, b_weekly, chart, WEEKLY_WEBHOOK_URL)
+                        sent_today.add(weekly_key)
+                        weekly_count += 1
+                        time.sleep(2)
 
         except Exception as e:
-            print(f"Error scanning {ticker}: {e}")
+            print(f"Error on {ticker}: {e}")
 
-    print(f"Scan complete. Total breakout alerts sent: {alerts_sent}")
+    save_sent_cache(sent_today)
+    print(f"Scan finished. Sent {daily_count} Daily alerts and {weekly_count} Weekly alerts.")
 
 if __name__ == "__main__":
     run_scanner()
