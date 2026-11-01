@@ -10,13 +10,10 @@ import mplfinance as mpf
 from datetime import datetime, timezone
 
 # ==========================================
-# הגדרות 2 החדרים בדיסקורד (Webhooks)
+# הגדרות 2 החדרים בדיסקורד (Webhooks מעודכנים)
 # ==========================================
-# תדביק כאן את ה-Webhook של חדר פריצות יומי:
-DAILY_WEBHOOK_URL = "YOUR_DAILY_WEBHOOK_URL_HERE"
-
-# תדביק כאן את ה-Webhook של חדר פריצות שבועי:
-WEEKLY_WEBHOOK_URL = "YOUR_WEEKLY_WEBHOOK_URL_HERE"
+DAILY_WEBHOOK_URL = "https://discord.com/api/webhooks/1566315887286296596/meUNLSkQiAd3QDPoB8NmbXQ5iy3wK23FqInNtNoaoQSIl7Co6Xuk7XlHsBCmnaG5Cs-w"
+WEEKLY_WEBHOOK_URL = "https://discord.com/api/webhooks/1566319961473814690/AmghSzUjmGiRCXd-4QInHE3X8dwcAzRaqqMwAKRLdo3WCW0eSlP7hmZKbeAtQGP2pcG9"
 
 # ==========================================
 # יקום מניות מורחב (~170 מניות סחירות ומומנטום)
@@ -29,13 +26,13 @@ WATCHLIST = [
     # Cyber, Cloud & Software Momentum
     "PLTR", "CRWD", "PANW", "FTNT", "ZS", "OKTA", "S", "CYBR", "SNOW", "DDOG", "NET", "MDB", "TEAM", "HUBS", "WDAY", "TTD", "APP", "U", "IOT", "DUOL", "CFLT", "PATH", "DOCN", "GTLB",
     # Crypto, Fintech & High-Beta Growth
-    "COIN", "MSTR", "MARA", "RIOT", "CLSK", "IREN", "CORZ", "WULF", "HOOD", "SOFI", "AFRM", "UPST", "SQ", "PYPL", "NU", "MELI", "SE", "SHOP", "UBER", "LYFT", "ABNB", "DASH", "ROKU", "RBLX", "RDDT", "CVNA", "DKNG", "HIMS", "CELH", "ONON", "DECK",
+    "COIN", "MSTR", "MARA", "RIOT", "CLSK", "IREN", "CORZ", "WULF", "HOOD", "SOFI", "AFRM", "UPST", "XYZ", "PYPL", "NU", "MELI", "SE", "SHOP", "UBER", "LYFT", "ABNB", "DASH", "ROKU", "RBLX", "RDDT", "CVNA", "DKNG", "HIMS", "CELH", "ONON", "DECK",
     # EV, Space, Clean Energy & Next-Gen
     "RIVN", "LCID", "NIO", "XPEV", "LI", "RKLB", "ASTS", "LUNR", "JOBY", "ACHR", "IONQ", "RGTI", "QBTS", "SMR", "OKLO", "CEG", "VST", "FSLR", "ENPH", "SEDG", "ALB",
     # Financials & Wall Street
     "JPM", "GS", "MS", "BAC", "C", "WFC", "BLK", "BX", "KKR", "APO", "V", "MA", "AXP", "SPGI", "ICE", "CME",
     # Retail, Consumer & Entertainment
-    "WMT", "COST", "TGT", "HD", "LOW", "NKE", "SBUX", "MCD", "CMG", "DIS", "SPOT", "LIVE", "LULU", "CROX", "ELF",
+    "WMT", "COST", "TGT", "HD", "LOW", "NKE", "SBUX", "MCD", "CMG", "DIS", "SPOT", "LYV", "LULU", "CROX", "ELF",
     # Healthcare, Biotech & Pharma
     "LLY", "NVO", "UNH", "ISRG", "VRTX", "REGN", "AMGN", "GILD", "MRNA", "BNTX", "VKTX", "ABBV", "PFE", "MRK", "TMO", "DHR", "DXCM",
     # Industrials, Defense, Energy & Commodities
@@ -44,29 +41,39 @@ WATCHLIST = [
     "SPY", "QQQ", "IWM", "DIA", "SOXX", "SMH", "IGV", "XLF", "XLE", "XLV", "XLI", "XBI", "ARKK", "GDX", "TAN", "URA", "IBIT"
 ]
 
-# קובץ זיכרון פנימי למניעת שליחה כפולה של אותה מניה באותו יום
-CACHE_FILE = "/tmp/sent_breakouts_today.json"
+# ==========================================
+# מנגנון זיכרון למניעת כפילויות (יומי ושבועי)
+# ==========================================
+CACHE_FILE = "sent_breakouts.json"
 
 def load_sent_cache():
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    week_str = datetime.now(timezone.utc).strftime("%Y-W%W")
+    
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r") as f:
                 data = json.load(f)
-                if data.get("date") == today_str:
-                    return set(data.get("sent", []))
+                daily_sent = set(data.get("daily", [])) if data.get("date") == today_str else set()
+                weekly_sent = set(data.get("weekly", [])) if data.get("week") == week_str else set()
+                return daily_sent, weekly_sent
         except Exception:
             pass
-    return set()
+    return set(), set()
 
-def save_sent_cache(sent_set):
+def save_sent_cache(daily_set, weekly_set):
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    week_str = datetime.now(timezone.utc).strftime("%Y-W%W")
     try:
         with open(CACHE_FILE, "w") as f:
-            json.load
-            json.dump({"date": today_str, "sent": list(sent_set)}, f)
-    except Exception:
-        pass
+            json.dump({
+                "date": today_str,
+                "week": week_str,
+                "daily": sorted(list(daily_set)),
+                "weekly": sorted(list(weekly_set))
+            }, f, indent=2)
+    except Exception as e:
+        print(f"Cache save error: {e}")
 
 # ==========================================
 # חישוב אינדיקטורים טכניים
@@ -126,13 +133,14 @@ def detect_live_breakout(df, timeframe="1D", lookback=25):
     sma50 = float(curr['SMA50']) if not np.isnan(curr['SMA50']) else ema20
     sma200 = float(curr['SMA200']) if not np.isnan(curr['SMA200']) else sma50
 
-    # תנאים גמישים שמייצרים תוכן חי בזמן המסחר:
-    # 1. המחיר הנוכחי (או הגבוה היומי) פרץ את רמת ההתנגדות, והמחיר כרגע מחזיק מעליה
-    # 2. הנר הקודם סגר מתחת להתנגדות (כלומר הפריצה מתרחשת עכשיו!)
-    # 3. המניה חיובית היום (ירוקה) ובעלייה של לפחות 1.2%
     change_pct = ((current_price - prev_close) / prev_close) * 100
-    is_breaking_now = (current_price > resistance_price) and (prev_close <= resistance_price * 1.003)
-    is_green_momentum = (current_price > open_price) and (change_pct >= 1.2)
+    
+    # תנאי פריצה בזמן אמת:
+    # 1. המחיר נסחר כעת מעל רמת ההתנגדות הקריטית
+    # 2. הנר הקודם סגר מתחת להתנגדות (פריצה טרייה שמתרחשת עכשיו)
+    # 3. נר ירוק בעלייה של לפחות 1.0%
+    is_breaking_now = (current_price > resistance_price) and (prev_close <= resistance_price * 1.004)
+    is_green_momentum = (current_price > open_price) and (change_pct >= 1.0)
 
     if is_breaking_now and is_green_momentum:
         breakout_pct = ((current_price - resistance_price) / resistance_price) * 100
@@ -263,10 +271,6 @@ def generate_breakout_chart(df, ticker, info):
 # שליחת ההתראה לחדר המתאים בדיסקורד
 # ==========================================
 def send_discord_alert(ticker, info, chart_buf, webhook_url):
-    if not webhook_url or "YOUR_" in webhook_url:
-        print(f"Webhook not configured for {info['timeframe']}. Skipping send.")
-        return
-
     is_daily = info["timeframe"] == "1D"
     tf_heb = "גרף יומי (1D)" if is_daily else "גרף שבועי (1W)"
     period_heb = f"{info['lookback']} ימי המסחר" if is_daily else f"{info['lookback']} השבועות"
@@ -279,7 +283,7 @@ def send_discord_alert(ticker, info, chart_buf, webhook_url):
         f"**מחיר בזמן אמת:** `${info['close']:.2f}` (`+{info['change_pct']:.2f}%`)  •  **טווח:** `{tf_heb}`\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"**📐 הסטאפ הטכני (Live Breakout Setup):**\n"
-        f"המניה פורצת כעת בזמן אמת את רמת ההתנגדות ב-**`${info['resistance']:.2f}`** "
+        f"המניה פורצת כעת בזמן אמת את רמת ההתנגדות הקריטית ב-**`${info['resistance']:.2f}`** "
         f"(שיא של {period_heb} האחרונים מאז `{info['resistance_date']}`). "
         f"המחיר נסחר כעת ב-`+{info['breakout_pct']:.2f}%` מעל נקודת הפריצה.\n\n"
         f"**📊 נתוני מומנטום ואינדיקטורים:**\n"
@@ -320,54 +324,50 @@ def send_discord_alert(ticker, info, chart_buf, webhook_url):
 # ==========================================
 def run_scanner():
     print(f"Starting Live Breakout Scanner on {len(WATCHLIST)} stocks...")
-    sent_today = load_sent_cache()
+    daily_sent, weekly_sent = load_sent_cache()
     daily_count = 0
     weekly_count = 0
 
     for ticker in WATCHLIST:
         try:
             # --- 1. סריקת גרף יומי (לחדר פריצות יומי) ---
-            daily_key = f"{ticker}_1D"
-            if daily_key not in sent_today and daily_count < 6: # מקסימום 6 התראות בסבב אחד כדי שיראה טבעי
+            if ticker not in daily_sent and daily_count < 6:
                 df_d = yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
                 if isinstance(df_d.columns, pd.MultiIndex):
                     df_d.columns = df_d.columns.get_level_values(0)
 
                 if not df_d.empty:
                     df_d = calculate_indicators(df_d)
-                    # בודק פריצה של 25 ימי מסחר אחרונים (או 50)
                     b_daily = detect_live_breakout(df_d, timeframe="1D", lookback=25)
                     if b_daily:
                         print(f"[!] LIVE DAILY Breakout: {ticker}")
                         chart = generate_breakout_chart(df_d, ticker, b_daily)
                         send_discord_alert(ticker, b_daily, chart, DAILY_WEBHOOK_URL)
-                        sent_today.add(daily_key)
+                        daily_sent.add(ticker)
                         daily_count += 1
                         time.sleep(2)
 
             # --- 2. סריקת גרף שבועי (לחדר פריצות שבועי) ---
-            weekly_key = f"{ticker}_1W"
-            if weekly_key not in sent_today and weekly_count < 4:
+            if ticker not in weekly_sent and weekly_count < 4:
                 df_w = yf.download(ticker, period="3y", interval="1wk", progress=False, auto_adjust=True)
                 if isinstance(df_w.columns, pd.MultiIndex):
                     df_w.columns = df_w.columns.get_level_values(0)
 
                 if not df_w.empty:
                     df_w = calculate_indicators(df_w)
-                    # בודק פריצה של 16 שבועות אחרונים (כ-4 חודשים)
                     b_weekly = detect_live_breakout(df_w, timeframe="1W", lookback=16)
                     if b_weekly:
                         print(f"[!] LIVE WEEKLY Breakout: {ticker}")
                         chart = generate_breakout_chart(df_w, ticker, b_weekly)
                         send_discord_alert(ticker, b_weekly, chart, WEEKLY_WEBHOOK_URL)
-                        sent_today.add(weekly_key)
+                        weekly_sent.add(ticker)
                         weekly_count += 1
                         time.sleep(2)
 
         except Exception as e:
             print(f"Error on {ticker}: {e}")
 
-    save_sent_cache(sent_today)
+    save_sent_cache(daily_sent, weekly_sent)
     print(f"Scan finished. Sent {daily_count} Daily alerts and {weekly_count} Weekly alerts.")
 
 if __name__ == "__main__":
