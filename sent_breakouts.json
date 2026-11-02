@@ -1,18 +1,18 @@
 {
-  "date": "2026-11-01",
-  "week": "2026-W43",
+  "date": "2026-11-02",
+  "week": "2026-W44",
   "daily": [
-    "GILD",
-    "ICE",
-    "NVO",
-    "REGN",
-    "VRTX",
+    "AXP",
+    "CVNA",
+    "KKR",
+    "MA",
+    "V",
     "WMT"
   ],
   "weekly": [
-    "ICE",
+    "COST",
     "MA",
-    "SPGI",
+    "V",
     "WMT"
   ]
 }
