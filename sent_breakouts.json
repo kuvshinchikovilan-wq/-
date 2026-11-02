@@ -2,16 +2,26 @@
   "date": "2026-11-02",
   "week": "2026-W44",
   "daily": [
+    "APO",
     "AXP",
+    "BX",
     "CVNA",
+    "DKNG",
+    "ICE",
     "KKR",
     "MA",
+    "PYPL",
+    "SPGI",
     "V",
     "WMT"
   ],
   "weekly": [
     "COST",
+    "CROX",
+    "ICE",
     "MA",
+    "REGN",
+    "SPGI",
     "V",
     "WMT"
   ]
