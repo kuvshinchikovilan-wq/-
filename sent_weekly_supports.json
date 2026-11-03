@@ -5,7 +5,11 @@
     "AMZN",
     "ASML",
     "DASH",
+    "ETN",
     "GE",
+    "GLD",
+    "HD",
+    "IBIT",
     "IBM",
     "MDB",
     "MPWR",
@@ -15,6 +19,7 @@
     "RTX",
     "SHOP",
     "TSLA",
-    "UBER"
+    "UBER",
+    "VST"
   ]
 }
