@@ -1,7 +1,12 @@
 {
   "date": "2026-11-03",
   "week": "2026-W44",
-  "daily": [],
+  "daily": [
+    "ONON",
+    "ROKU",
+    "RTX",
+    "TXN"
+  ],
   "weekly": [
     "COST",
     "CROX",
@@ -10,7 +15,9 @@
     "MA",
     "PFE",
     "REGN",
+    "ROKU",
     "SPGI",
+    "TXN",
     "V",
     "WMT"
   ]
