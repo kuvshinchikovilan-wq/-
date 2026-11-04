@@ -3,12 +3,18 @@
   "week": "2026-W44",
   "daily": [
     "AAPL",
+    "ABNB",
     "AMZN",
+    "CELH",
     "CVNA",
+    "DECK",
+    "DKNG",
     "DUOL",
     "INTU",
+    "JPM",
     "LYFT",
     "MSFT",
+    "ONON",
     "PYPL",
     "ROKU",
     "SOFI",
@@ -17,6 +23,7 @@
   ],
   "weekly": [
     "AAPL",
+    "AMGN",
     "BLK",
     "COST",
     "CROX",
@@ -24,9 +31,11 @@
     "DIS",
     "DUOL",
     "ICE",
+    "ISRG",
     "LOW",
     "LYFT",
     "MA",
+    "MCD",
     "MSFT",
     "PFE",
     "REGN",
@@ -36,6 +45,7 @@
     "TXN",
     "V",
     "WMT",
+    "XLF",
     "XYZ"
   ]
 }
