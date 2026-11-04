@@ -1,19 +1,22 @@
 {
-  "date": "2026-11-03",
+  "date": "2026-11-04",
   "week": "2026-W44",
   "daily": [
-    "FSLR",
-    "ONON",
-    "REGN",
-    "ROKU",
-    "RTX",
-    "TXN"
+    "AMZN",
+    "DUOL",
+    "INTU",
+    "SOFI",
+    "TTD",
+    "XYZ"
   ],
   "weekly": [
+    "BLK",
     "COST",
     "CROX",
     "DIS",
     "ICE",
+    "LOW",
+    "LYFT",
     "MA",
     "PFE",
     "REGN",
@@ -22,6 +25,7 @@
     "SPOT",
     "TXN",
     "V",
-    "WMT"
+    "WMT",
+    "XYZ"
   ]
 }
