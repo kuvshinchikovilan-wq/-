@@ -5,20 +5,26 @@
     "AAPL",
     "ABNB",
     "AMZN",
+    "BLK",
+    "BX",
     "CELH",
     "CVNA",
+    "DASH",
     "DECK",
     "DKNG",
     "DUOL",
     "INTU",
     "JPM",
+    "KKR",
     "LYFT",
+    "MS",
     "MSFT",
     "ONON",
     "PYPL",
     "ROKU",
     "SOFI",
     "TTD",
+    "V",
     "XYZ"
   ],
   "weekly": [
@@ -46,6 +52,7 @@
     "V",
     "WMT",
     "XLF",
+    "XLV",
     "XYZ"
   ]
 }
