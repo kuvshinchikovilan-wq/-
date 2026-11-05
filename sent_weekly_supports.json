@@ -3,6 +3,7 @@
   "sent": [
     "ABNB",
     "AMZN",
+    "ANET",
     "ASML",
     "AXP",
     "BX",
@@ -15,6 +16,8 @@
     "HD",
     "IBIT",
     "IBM",
+    "IGV",
+    "IWM",
     "MDB",
     "MELI",
     "META",
@@ -22,6 +25,7 @@
     "MS",
     "NU",
     "NVDA",
+    "NXPI",
     "PANW",
     "PLTR",
     "QQQ",
@@ -30,6 +34,7 @@
     "TSLA",
     "UBER",
     "URI",
-    "VST"
+    "VST",
+    "XLE"
   ]
 }
