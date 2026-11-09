@@ -1,43 +1,17 @@
 {
-  "date": "2026-11-06",
-  "week": "2026-W44",
+  "date": "2026-11-09",
+  "week": "2026-W45",
   "daily": [
+    "ABNB",
+    "AMZN",
     "APP",
-    "LI",
-    "MRNA",
-    "U",
-    "XPEV"
+    "CMG",
+    "TTD",
+    "U"
   ],
   "weekly": [
-    "AAPL",
-    "AMGN",
-    "BLK",
-    "COST",
-    "CROX",
-    "CVNA",
-    "DIS",
-    "DUOL",
-    "ELF",
-    "HD",
-    "ICE",
-    "ISRG",
-    "LOW",
-    "LYFT",
-    "MA",
-    "MCD",
-    "MRNA",
-    "MSFT",
-    "PFE",
-    "REGN",
+    "ABNB",
     "ROKU",
-    "SPGI",
-    "SPOT",
-    "TXN",
-    "U",
-    "V",
-    "WMT",
-    "XLF",
-    "XLV",
-    "XYZ"
+    "U"
   ]
 }
