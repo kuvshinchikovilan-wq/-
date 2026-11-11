@@ -8,6 +8,7 @@
     "AXP",
     "BX",
     "CRWD",
+    "ETN",
     "GE",
     "ISRG",
     "KKR",
@@ -16,10 +17,14 @@
     "NET",
     "NU",
     "NVDA",
+    "NXPI",
     "PLTR",
+    "RTX",
     "SHOP",
     "TSLA",
     "TSM",
-    "TXN"
+    "TXN",
+    "UBER",
+    "XOM"
   ]
 }
