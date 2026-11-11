@@ -2,6 +2,7 @@
   "date": "2026-11-11",
   "week": "2026-W45",
   "daily": [
+    "AAPL",
     "CME",
     "CMG",
     "COST",
@@ -12,6 +13,7 @@
     "TTD"
   ],
   "weekly": [
+    "AAPL",
     "ABNB",
     "CME",
     "COST",
