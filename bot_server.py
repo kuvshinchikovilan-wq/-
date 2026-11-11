@@ -14,7 +14,6 @@ import pandas as pd
 import yfinance as yf
 
 matplotlib.use('Agg')
-# ביטול פירוש סימן $ כנוסחה מתמטית כדי למנוע ParseException כשיש שני מחירים בכותרת
 plt.rcParams['text.parse_math'] = False
 
 intents = discord.Intents.default()
@@ -64,7 +63,6 @@ def get_extended_hours_data(ticker_symbol: str, regular_close: float):
         latest_price = float(df_intraday['Close'].iloc[-1])
         ts_minutes = last_ts.hour * 60 + last_ts.minute
 
-        # Pre-Market: 04:00 to 09:30 NY Time
         if 240 <= ts_minutes < 570 and weekday < 5:
             ext_info['session'] = 'PRE'
             ext_info['label'] = 'Pre-Market (טרום מסחר)'
@@ -72,7 +70,6 @@ def get_extended_hours_data(ticker_symbol: str, regular_close: float):
             ext_info['ext_change_pct'] = (
                 (latest_price - regular_close) / regular_close
             ) * 100
-        # After-Hours: 16:00 to 20:00 NY Time (or overnight latest print)
         elif ts_minutes >= 960 or current_minutes >= 960 or current_minutes < 240:
             if abs(latest_price - regular_close) / regular_close > 0.0005:
                 ext_info['session'] = 'POST'
@@ -95,17 +92,14 @@ def calc_diagonal_trendlines(plot_df: pd.DataFrame, atr: float):
     lows = plot_df['Low'].values.astype(float)
     last_close = float(plot_df['Close'].iloc[-1])
 
-    # מתמקדים ב-45 הנרות האחרונים כדי שהתעלה האלכסונית תשקף את הטווח הקצר-בינוני
-    lookback = min(45, n)
+    lookback = min(35, n)
     x_recent = x[-lookback:]
     highs_recent = highs[-lookback:]
     lows_recent = lows[-lookback:]
 
-    # חישוב קו מגמה מבוסס רגרסיה ליניארית על הפסגות והשפלים של הטווח הקצר
     slope_h, intercept_h = np.polyfit(x_recent, highs_recent, 1)
     slope_l, intercept_l = np.polyfit(x_recent, lows_recent, 1)
 
-    # דחיפת הקו העליון שיעבור דרך הפסגות הבולטות והקו התחתון דרך השפלים הבולטים
     upper_base = slope_h * x + intercept_h
     lower_base = slope_l * x + intercept_l
 
@@ -118,14 +112,14 @@ def calc_diagonal_trendlines(plot_df: pd.DataFrame, atr: float):
     upper_line = upper_base + upper_offset
     lower_line = lower_base + lower_offset
 
-    # הגנה מפני בריחת הקו האלכסוני רחוק מדי מהמחיר הנוכחי בנר האחרון
-    max_diag_dist = max(atr * 3.5, last_close * 0.08)
+    # חסימה קשיחה לטווח הקצר: הקו האלכסוני לא יכול לברוח יותר מ-2.5 ATR מהמחיר הנוכחי
+    max_diag_dist = min(atr * 2.5, last_close * 0.06)
     if upper_line[-1] > last_close + max_diag_dist or upper_line[-1] < last_close:
-        shift = (last_close + min(atr * 1.8, last_close * 0.04)) - upper_line[-1]
+        shift = (last_close + min(atr * 1.5, last_close * 0.035)) - upper_line[-1]
         upper_line = upper_line + shift
 
     if lower_line[-1] < last_close - max_diag_dist or lower_line[-1] > last_close:
-        shift = (last_close - min(atr * 1.8, last_close * 0.04)) - lower_line[-1]
+        shift = (last_close - min(atr * 1.5, last_close * 0.035)) - lower_line[-1]
         lower_line = lower_line + shift
 
     return upper_line, lower_line, slope_h, slope_l
@@ -133,40 +127,36 @@ def calc_diagonal_trendlines(plot_df: pd.DataFrame, atr: float):
 
 def calc_short_term_sr_levels(plot_df: pd.DataFrame, active_price: float, atr: float):
     """
-    איתור רמות תמיכה והתנגדות (R1, R2, S1, S2) רלוונטיות לטווח הקצר בלבד,
-    תוך סינון שיאים היסטוריים רחוקים (כמו 600$ כשהמחיר 450$).
+    איתור רמות תמיכה והתנגדות (R1, R2, S1, S2) קרובות לטווח הקצר בלבד!
+    חוסם לחלוטין שיאים היסטוריים רחוקים.
     """
-    recent_df = plot_df.tail(60)
+    recent_df = plot_df.tail(45)
     highs = recent_df['High'].values.astype(float)
     lows = recent_df['Low'].values.astype(float)
 
     candidate_highs = []
     candidate_lows = []
 
-    # 1. איסוף נקודות פיבוט מקומיות (Swing Highs & Swing Lows)
     for i in range(2, len(recent_df) - 2):
         if highs[i] >= np.max(highs[i - 2 : i + 3]):
             candidate_highs.append(float(highs[i]))
         if lows[i] <= np.min(lows[i - 2 : i + 3]):
             candidate_lows.append(float(lows[i]))
 
-    # 2. הוספת שיאים ושפלים של הטווח המיידי (5, 12, 25 ימים אחרונים)
-    for win in [5, 12, 25]:
+    for win in [5, 10, 20]:
         candidate_highs.append(float(recent_df['High'].tail(win).max()))
         candidate_lows.append(float(recent_df['Low'].tail(win).min()))
 
-    # 3. הוספת ממוצעים נעים כרמות דינמיות אם הם קרובים למחיר
     for col in ['SMA50', 'SMA100', 'SMA200']:
         if col in recent_df.columns and pd.notna(recent_df[col].iloc[-1]):
             ma_val = float(recent_df[col].iloc[-1])
             candidate_highs.append(ma_val)
             candidate_lows.append(ma_val)
 
-    # הגדרת מרחק מינימלי ומקסימלי לטווח הקצר (מונע קפיצה של 200$ מעל המחיר)
-    min_gap = max(atr * 0.35, active_price * 0.006)
-    max_r1_gap = min(atr * 3.0, active_price * 0.075)  # עד 3 ATR או גג 7.5% ל-R1
+    # טווח קצר הדוק: R1/S1 חייבים להיות במרחק של עד 2.5 ATR או גג 6% מהמחיר הנוכחי!
+    min_gap = max(atr * 0.3, active_price * 0.005)
+    max_r1_gap = min(atr * 2.5, active_price * 0.06)
 
-    # סינון ומיון התנגדויות מעל המחיר הנוכחי בטווח הקצר
     valid_res = sorted(
         list(
             set(
@@ -179,7 +169,6 @@ def calc_short_term_sr_levels(plot_df: pd.DataFrame, active_price: float, atr: f
         )
     )
 
-    # סינון ומיון תמיכות מתחת למחיר הנוכחי בטווח הקצר
     valid_sup = sorted(
         list(
             set(
@@ -193,19 +182,17 @@ def calc_short_term_sr_levels(plot_df: pd.DataFrame, active_price: float, atr: f
         reverse=True,
     )
 
-    # בחירת R1 (ההתנגדות הקרובה ביותר) ו-R2 (היעד הבא מעל R1 בטווח הקצר)
-    r1 = valid_res[0] if valid_res else (active_price + atr * 1.5)
+    r1 = valid_res[0] if valid_res else round(active_price + atr * 1.3, 2)
     higher_res = [
-        h for h in valid_res if h >= r1 + max(atr * 0.7, active_price * 0.015)
+        h for h in valid_res if h >= r1 + max(atr * 0.6, active_price * 0.012)
     ]
-    r2 = higher_res[0] if higher_res else (r1 + atr * 1.5)
+    r2 = higher_res[0] if higher_res else round(r1 + atr * 1.4, 2)
 
-    # בחירת S1 (התמיכה הקרובה ביותר) ו-S2 (התמיכה הבאה מתחת ל-S1 בטווח הקצר)
-    s1 = valid_sup[0] if valid_sup else (active_price - atr * 1.5)
+    s1 = valid_sup[0] if valid_sup else round(active_price - atr * 1.3, 2)
     lower_sup = [
-        l for l in valid_sup if l <= s1 - max(atr * 0.7, active_price * 0.015)
+        l for l in valid_sup if l <= s1 - max(atr * 0.6, active_price * 0.012)
     ]
-    s2 = lower_sup[0] if lower_sup else (s1 - atr * 1.5)
+    s2 = lower_sup[0] if lower_sup else round(s1 - atr * 1.4, 2)
 
     return float(r1), float(r2), float(s1), float(s2)
 
@@ -228,14 +215,12 @@ def generate_ta_package(ticker_symbol: str):
     df['SMA100'] = df['Close'].rolling(window=100).mean()
     df['SMA200'] = df['Close'].rolling(window=200).mean()
 
-    # חישוב ATR (14) למדידת תנודתיות וטווח קצר אמיתי
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     df['ATR'] = tr.rolling(14).mean()
 
-    # חישוב RSI (14) בשיטת Wilder
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -1 * delta.clip(upper=0)
@@ -244,7 +229,7 @@ def generate_ta_package(ticker_symbol: str):
     rs = avg_gain / avg_loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    plot_df = df.tail(85).copy()
+    plot_df = df.tail(75).copy()
     plot_df['DateNum'] = mdates.date2num(plot_df.index.to_pydatetime())
 
     last_close = float(plot_df['Close'].iloc[-1])
@@ -279,7 +264,6 @@ def generate_ta_package(ticker_symbol: str):
         else None
     )
 
-    # בדיקת Pre-Market / After-Hours
     ext_info = get_extended_hours_data(ticker_symbol, last_close)
     active_price = (
         ext_info['ext_price']
@@ -287,10 +271,8 @@ def generate_ta_package(ticker_symbol: str):
         else last_close
     )
 
-    # רמות תמיכה והתנגדות אופקיות ממוקדות לטווח הקצר
     r1, r2, s1, s2 = calc_short_term_sr_levels(plot_df, active_price, last_atr)
 
-    # קווים אלכסוניים מרוסנים לטווח הקצר
     upper_trend, lower_trend, slope_h, slope_l = calc_diagonal_trendlines(
         plot_df, last_atr
     )
@@ -380,7 +362,7 @@ def generate_ta_package(ticker_symbol: str):
             zorder=4,
         )
 
-    trend_len = min(45, len(plot_df))
+    trend_len = min(35, len(plot_df))
     ax1.plot(
         plot_df['DateNum'].values[-trend_len:],
         upper_trend[-trend_len:],
@@ -405,11 +387,10 @@ def generate_ta_package(ticker_symbol: str):
     x_max = plot_df['DateNum'].max() + 2
     ax1.set_xlim(plot_df['DateNum'].min() - 2, x_max + 15)
 
-    # מיקוד ציר ה-Y סביב 60 הנרות האחרונים והרמות הקרובות כדי שהנרות לא יימעכו
-    recent_60_low = float(plot_df['Low'].tail(60).min())
-    recent_60_high = float(plot_df['High'].tail(60).max())
-    y_min = min(recent_60_low, s2) * 0.975
-    y_max = max(recent_60_high, r2) * 1.025
+    recent_45_low = float(plot_df['Low'].tail(45).min())
+    recent_45_high = float(plot_df['High'].tail(45).max())
+    y_min = min(recent_45_low, s2) * 0.975
+    y_max = max(recent_45_high, r2) * 1.025
     ax1.set_ylim(y_min, y_max)
 
     levels = [
@@ -514,7 +495,6 @@ def generate_ta_package(ticker_symbol: str):
         zorder=6,
     )
 
-    # כותרות עליונות
     sign = '+' if pct_change >= 0 else ''
     header_left = f'{ticker_symbol} • INSTITUTIONAL TECHNICAL CHART (1D)'
     header_right = f'CLOSE: ${last_close:.2f} ({sign}{pct_change:.2f}%)'
@@ -632,9 +612,9 @@ def generate_ta_package(ticker_symbol: str):
             f"המניה נסחרת כעת ב-**${ext_info['ext_price']:.2f}** ({ext_s}{ext_info['ext_change_pct']:.2f}% ביחס לסגירה ב-${last_close:.2f}). "
         )
         if ext_info['ext_price'] > r1:
-            session_text += f'⚠️ שים לב: המניה פורצת במסחר המורחב מעל רמת ההתנגדות R1 (${r1:.2f}) – במידה ותחזיק מעליה בפתיחה, צפוי מומנטום חיובי חזק.'
+            session_text += f'⚠️ שים לב: המניה פורצת במסחר המורחב מעל רמת ההתנגדות הקרובה R1 (${r1:.2f}) – במידה ותחזיק מעליה בפתיחה, צפוי מומנטום חיובי חזק.'
         elif ext_info['ext_price'] < s1:
-            session_text += f'⚠️ שים לב: המניה נסחרת במסחר המורחב מתחת לתמיכה S1 (${s1:.2f}) – סכנת שבירה בפתיחת המסחר.'
+            session_text += f'⚠️ שים לב: המניה נסחרת במסחר המורחב מתחת לתמיכה הקרובה S1 (${s1:.2f}) – סכנת שבירה בפתיחת המסחר.'
         else:
             session_text += 'המחיר נע בתוך טווח התמיכה וההתנגדות הקרוב.'
     else:
@@ -648,7 +628,7 @@ def generate_ta_package(ticker_symbol: str):
     )
 
     embed.add_field(
-        name='📐 מבנה מגמה, ממוצעים וקווים אלכסוניים',
+        name='📐 מבנה מגמה, ממוצעים וקווים אלכסוניים (טווח קצר)',
         value=(
             f'• {trend_summary}\n'
             f'• **מיקום ביחס לממוצעים:** {", ".join(ma_signals)}\n'
@@ -664,16 +644,16 @@ def generate_ta_package(ticker_symbol: str):
     )
 
     embed.add_field(
-        name='🟢 תרחיש חיובי (Bullish Scenario)',
+        name='🟢 תרחיש חיובי לטווח הקצר (Bullish Scenario)',
         value=(
             f'התבססות מעל **${s1:.2f}** ופריצה במומנטום של רמת ההתנגדות הקרובה ב-**${r1:.2f}** '
-            f'(והקו האלכסוני באזור **${diag_res_now:.2f}**) יפתחו פוטנציאל מהלך לעבר היעד הבא ב-**${r2:.2f}**.'
+            f'(והקו האלכסוני באזור **${diag_res_now:.2f}**) יפתחו פוטנציאל מהלך לעבר היעד הקרוב הבא ב-**${r2:.2f}**.'
         ),
         inline=False,
     )
 
     embed.add_field(
-        name='🔴 תרחיש שלילי (Bearish Scenario)',
+        name='🔴 תרחיש שלילי לטווח הקצר (Bearish Scenario)',
         value=(
             f'חולשה מתחת ל-**${r1:.2f}** ושבירה בסגירה יומית של רמת התמיכה הקרובה ב-**${s1:.2f}** '
             f'(או שבירת התמיכה האלכסונית ב-**${diag_sup_now:.2f}**) עלולות להוביל להעמקת מימושים לעבר רצועת התמיכה ב-**${s2:.2f}**.'
@@ -702,15 +682,13 @@ async def on_ready():
 
 @bot.tree.command(
     name='ta',
-    description=(
-        'קבלת גרף פרימיום + ניתוח טכני כתוב, תרחישים וזיהוי פרימרקט (נשמר'
-        ' בפרטי)'
-    ),
+    description='קבלת גרף פרימיום + ניתוח טכני ממוקד לטווח הקצר (נשלח אליך בפרטי DM)',
 )
-@app_commands.describe(ticker='סימול המניה באנגלית (למשל NVDA, AAPL, TSLA)')
+@app_commands.describe(ticker='סימול המניה באנגלית (למשל NVDA, AMD, TSLA)')
 async def slash_ta(interaction: discord.Interaction, ticker: str):
+    # ephemeral=True מבטיח שרק המשתמש רואה את הודעת הטעינה בחדר ולא אף אחד אחר!
     await interaction.response.defer(ephemeral=True)
-    clean_ticker = ticker.upper().strip()
+    clean_ticker = ticker.upper().strip().replace('$', '')
 
     try:
         buf, embed = await asyncio.to_thread(generate_ta_package, clean_ticker)
@@ -724,10 +702,11 @@ async def slash_ta(interaction: discord.Interaction, ticker: str):
         file = discord.File(fp=buf, filename=f'{clean_ticker}_vip_ta.png')
 
         try:
+            # שליחה להודעות הפרטיות (DM) של המשתמש בלבד
             await interaction.user.send(embed=embed, file=file)
             await interaction.followup.send(
                 f'✅ **הניתוח הטכני המלא והגרף עבור ${clean_ticker} נשלחו אליך להודעות הפרטיות (DM)!**\n'
-                f'*(כך התמונה והתרחישים יישארו שמורים אצלך לתמיד גם אחרי שתצא מהחדר)*',
+                f'*(ההודעה הזו גלויה רק לך ולא מופיעה בחדר)*',
                 ephemeral=True,
             )
         except discord.Forbidden:
@@ -736,7 +715,7 @@ async def slash_ta(interaction: discord.Interaction, ticker: str):
                 fp=buf, filename=f'{clean_ticker}_vip_ta.png'
             )
             await interaction.followup.send(
-                content='⚠️ *ההודעות הפרטיות שלך סגורות בשרת, לכן הניתוח מוצג כאן (פתח אפשרות לקבלת DM מהשרת כדי שהגרפים יישמרו לך בפרטי לתמיד):*',
+                content='⚠️ *ההודעות הפרטיות שלך סגורות בשרת, לכן הניתוח מוצג כאן באופן מוסתר (גלוי רק לך):*',
                 embed=embed,
                 file=fallback_file,
                 ephemeral=True,
@@ -758,13 +737,13 @@ async def prefix_ta(ctx: commands.Context, ticker: str = None):
     if not ticker:
         return
 
-    clean_ticker = ticker.upper().strip()
+    clean_ticker = ticker.upper().strip().replace('$', '')
     try:
         buf, embed = await asyncio.to_thread(generate_ta_package, clean_ticker)
         if buf is None or embed is None:
             await ctx.send(
                 f'❌ {ctx.author.mention} לא נמצאו נתונים עבור **{clean_ticker}**.',
-                delete_after=12,
+                delete_after=10,
             )
             return
 
@@ -772,23 +751,20 @@ async def prefix_ta(ctx: commands.Context, ticker: str = None):
         try:
             await ctx.author.send(embed=embed, file=file)
             await ctx.send(
-                f'📬 {ctx.author.mention} הניתוח המלא עבור **${clean_ticker}** נשלח אליך לפרטי (DM) ונשמר שם קבוע!',
-                delete_after=8,
+                f'📬 {ctx.author.mention} הניתוח המלא עבור **${clean_ticker}** נשלח אליך לפרטי (DM)!',
+                delete_after=6,
             )
         except discord.Forbidden:
-            buf.seek(0)
-            fallback_file = discord.File(
-                fp=buf, filename=f'{clean_ticker}_vip_ta.png'
-            )
             await ctx.send(
-                content=ctx.author.mention, embed=embed, file=fallback_file
+                f'⚠️ {ctx.author.mention} פתח את האפשרות לקבל הודעות פרטיות (DM) מחברי השרת כדי לקבל את הניתוח לפרטי.',
+                delete_after=12,
             )
 
     except Exception as e:
-        await ctx.send(f'❌ שגיאה בהפקת הגרף: {e}', delete_after=12)
+        await ctx.send(f'❌ שגיאה בהפקת הגרף: {e}', delete_after=10)
 
 
-TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+TOKEN = os.getenv('DISCORD_BOT_TOKEN') or os.getenv('BOT_TOKEN')
 if TOKEN:
     bot.run(TOKEN)
 else:
