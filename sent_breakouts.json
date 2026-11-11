@@ -3,11 +3,15 @@
   "week": "2026-W45",
   "daily": [
     "COST",
+    "GE",
+    "ICE",
+    "MPWR",
     "TTD"
   ],
   "weekly": [
     "ABNB",
     "COST",
+    "ICE",
     "MCD",
     "MRNA",
     "ROKU",
