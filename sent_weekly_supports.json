@@ -13,7 +13,9 @@
     "ETN",
     "GE",
     "GLD",
+    "IGV",
     "ISRG",
+    "IWM",
     "KKR",
     "META",
     "MS",
@@ -25,11 +27,13 @@
     "QQQ",
     "RTX",
     "SHOP",
+    "SMH",
     "TSLA",
     "TSM",
     "TXN",
     "UBER",
     "VST",
+    "XLI",
     "XOM"
   ]
 }
