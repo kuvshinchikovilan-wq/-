@@ -1,17 +1,7 @@
 {
-  "date": "2026-11-11",
+  "date": "2026-11-12",
   "week": "2026-W45",
-  "daily": [
-    "AAPL",
-    "CME",
-    "CMG",
-    "COST",
-    "GE",
-    "ICE",
-    "MPWR",
-    "NXPI",
-    "TTD"
-  ],
+  "daily": [],
   "weekly": [
     "AAPL",
     "ABNB",
