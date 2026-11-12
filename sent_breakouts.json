@@ -1,13 +1,16 @@
 {
   "date": "2026-11-12",
   "week": "2026-W45",
-  "daily": [],
+  "daily": [
+    "LLY"
+  ],
   "weekly": [
     "AAPL",
     "ABNB",
     "CME",
     "COST",
     "ICE",
+    "LLY",
     "MCD",
     "MRNA",
     "ROKU",
