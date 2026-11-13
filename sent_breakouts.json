@@ -3,13 +3,15 @@
   "week": "2026-W45",
   "daily": [
     "AAPL",
-    "COST"
+    "COST",
+    "CROX"
   ],
   "weekly": [
     "AAPL",
     "ABNB",
     "CME",
     "COST",
+    "CROX",
     "ICE",
     "LLY",
     "MCD",
