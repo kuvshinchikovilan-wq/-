@@ -1,24 +1,8 @@
 {
-  "date": "2026-11-13",
-  "week": "2026-W45",
-  "daily": [
-    "AAPL",
-    "COST",
-    "CROX"
-  ],
+  "date": "2026-11-16",
+  "week": "2026-W46",
+  "daily": [],
   "weekly": [
-    "AAPL",
-    "ABNB",
-    "CME",
-    "COST",
-    "CROX",
-    "ICE",
-    "LLY",
-    "MCD",
-    "MRNA",
-    "ROKU",
-    "TMO",
-    "U",
-    "XYZ"
+    "ROKU"
   ]
 }
