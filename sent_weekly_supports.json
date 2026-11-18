@@ -6,12 +6,15 @@
     "ANET",
     "AXP",
     "CRWD",
+    "CVX",
     "DE",
     "GE",
     "GS",
+    "HD",
     "IOT",
     "ISRG",
     "JPM",
+    "LOW",
     "META",
     "MPWR",
     "PANW",
@@ -20,6 +23,8 @@
     "SPGI",
     "TSLA",
     "TSM",
-    "UBER"
+    "UBER",
+    "URI",
+    "XOM"
   ]
 }
