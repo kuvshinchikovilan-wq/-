@@ -1,6 +1,7 @@
 {
   "week": "2026-W46",
   "sent": [
+    "ABNB",
     "ADI",
     "AMD",
     "AMZN",
@@ -13,6 +14,7 @@
     "GOOGL",
     "GS",
     "HD",
+    "IGV",
     "IOT",
     "ISRG",
     "IWM",
@@ -22,7 +24,9 @@
     "META",
     "MPWR",
     "MS",
+    "MSFT",
     "NET",
+    "NU",
     "PANW",
     "PLTR",
     "QQQ",
@@ -32,6 +36,7 @@
     "SPY",
     "TSLA",
     "TSM",
+    "TXN",
     "UBER",
     "URI",
     "VRTX",
