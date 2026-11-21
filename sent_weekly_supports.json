@@ -8,6 +8,7 @@
     "ANET",
     "AXP",
     "BLK",
+    "CEG",
     "CRWD",
     "CVX",
     "DE",
@@ -35,6 +36,7 @@
     "RTX",
     "SHOP",
     "SPGI",
+    "SPOT",
     "SPY",
     "TSLA",
     "TSM",
@@ -42,6 +44,8 @@
     "UBER",
     "URI",
     "VRTX",
+    "XLF",
+    "XLI",
     "XOM"
   ]
 }
