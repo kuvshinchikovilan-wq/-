@@ -18,7 +18,6 @@ RSS_FEEDS = [
     "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,IWM,XLF,XLK,XLE,XLV,XLI,XLY,XLP,SMH,IGV&region=US&lang=en-US",
     "https://search.cnbc.com/rs/search/combinedXML/view.xml?partnerId=wrss01&id=10000664",
     "https://www.investing.com/rss/news_25.rss",
-    "https://www.investing.com/rss/news_1.rss",
     "https://www.marketwatch.com/rss/topstories",
 ]
 
@@ -42,26 +41,41 @@ INSTITUTIONS = {
     "Citadel / Hedge Funds": ["citadel", "hedge fund", "fund manager", "asset manager"],
 }
 
+# חסימת מט"ח, שערי חליפין ורעש שאינו הקצאת מניות/סקטורים
+EXCLUDE_KEYWORDS = [
+    "sterling", "gbp", "dollar", "usd", "euro", "eur", "yen", "jpy",
+    "franc", "chf", "yuan", "cny", "peso", "forex", "currency", "currencies",
+    "fx", "rebound", "exchange rate", "mortgage rate", "housing market"
+]
+
+# חובת הקשר ברור של מניות / סקטורים / קרנות / הקצאת נכסים
+EQUITY_CONTEXT_KEYWORDS = [
+    "stock", "stocks", "equities", "equity", "sector", "sectors",
+    "s&p 500", "s&p", "nasdaq", "dow", "wall street",
+    "semiconductor", "chip", "ai ", "tech", "software", "financial",
+    "bank stocks", "energy", "healthcare", "industrial", "consumer",
+    "small cap", "megacap", "overweight", "underweight", "allocation",
+    "portfolio", "exposure", "etf", "fund", "funds"
+]
+
 SECTORS = {
     "שבבים ו-AI (Semiconductors / AI)": ["semiconductor", "chip", "ai ", "nvidia", "nvda", "amd", "broadcom", "tsmc", "smh", "soxx"],
     "טכנולוגיה ותוכנה (Tech / Software)": ["tech", "software", "cloud", "megacap", "xlk", "igv", "qqq"],
-    "פיננסים ובנקים (Financials)": ["bank", "financial", "xlf", "credit", "lending"],
+    "פיננסים ובנקים (Financials)": ["financial", "bank stocks", "xlf", "credit", "lending"],
     "אנרגיה וסחורות (Energy / Commodities)": ["energy", "oil", "crude", "xle", "commodity", "commodities", "gold"],
     "בריאות ופארמה (Healthcare)": ["healthcare", "health care", "pharma", "biotech", "xlv"],
     "תעשייה וביטחון (Industrials / Defense)": ["industrial", "defense", "xli", "aerospace"],
-    "צרכנות (Consumer)": ["consumer", "retail", "xly", "xlp", "spending"],
-    "מניות ואקוויטי כללי (Equities / Allocation)": ["equities", "equity", "stocks", "s&p 500", "spy", "allocation", "asset mix", "inflows", "outflows", "flows"],
-    "אג\"ח ותשואות (Rates / Bonds)": ["treasury", "yields", "bonds", "fixed income", "rates"],
+    "צרכנות (Consumer)": ["consumer", "retail", "xly", "xlp"],
+    "מניות והקצאת נכסים (Equities / Allocation)": ["equities", "equity", "stocks", "s&p 500", "spy", "allocation", "asset mix", "inflows", "outflows", "flows"],
 }
 
 ALLOCATION_KEYWORDS = [
     "overweight", "underweight", "equal-weight", "equal weight",
-    "allocation", "equities", "stocks", "sector", "exposure",
-    "raise", "raises", "raised", "cut", "cuts", "lower", "lowers",
-    "upgrade", "downgrade", "bullish", "bearish", "rotate", "rotation",
-    "tilt", "favor", "favors", "cautious", "defensive", "cyclical",
-    "target", "price target", "outperform", "underperform",
-    "buy", "sell", "inflows", "outflows", "flows", "rally", "risk"
+    "allocation", "sector", "exposure", "rotate", "rotation",
+    "upgrade", "upgraded", "downgrade", "downgraded",
+    "bullish", "bearish", "tilt", "favor", "favors",
+    "cautious", "defensive", "cyclical", "outperform", "underperform",
+    "inflows", "outflows", "price target", "top pick", "raises", "lowers"
 ]
 
 def clean_html(raw_text: str) -> str:
@@ -105,69 +119,73 @@ def detect_sectors(text_lower: str) -> list[str]:
     for sector_name, keywords in SECTORS.items():
         if any(kw in text_lower for kw in keywords):
             matched.append(sector_name)
-    return matched if matched else ["הקצאת נכסים כללית (General Market / Strategy)"]
+    return matched if matched else ["מניות והקצאת נכסים (Equities Strategy)"]
 
 def detect_stance(text_lower: str):
-    bull_words = ["overweight", "raise", "raises", "raised", "upgrade", "upgraded", "bullish", "favor", "favors", "increase", "boost", "outperform", "buy", "inflows"]
-    bear_words = ["underweight", "cut", "cuts", "lower", "lowers", "downgrade", "downgraded", "bearish", "cautious", "defensive", "trim", "reduce", "underperform", "sell", "outflows"]
+    bull_words = [
+        "overweight", "upgrade", "upgraded", "bullish", "favor", "favors",
+        "increase exposure", "raises exposure", "boosts", "outperform",
+        "top pick", "inflows", "buy rating", "raises target"
+    ]
+    bear_words = [
+        "underweight", "downgrade", "downgraded", "bearish", "cautious",
+        "defensive", "trim", "reduce exposure", "cuts exposure", "cuts stocks",
+        "cuts equities", "lowers target", "underperform", "sell rating", "outflows"
+    ]
 
     bull_hits = sum(1 for w in bull_words if w in text_lower)
     bear_hits = sum(1 for w in bear_words if w in text_lower)
 
     if bull_hits > bear_hits:
         return (
-            "🟢 העלאת חשיפה / עמדה שורית (Overweight / Bullish)",
+            "🟢 העלאת חשיפה / עמדה חיובית (Overweight / Bullish)",
             0x00E676,
             "הגדלה / חיזוק"
         )
     elif bear_hits > bull_hits:
         return (
-            "🔴 הפחתת חשיפה / עמדה זהירה-דובית (Underweight / Cautious)",
+            "🔴 הפחתת חשיפה / עמדה זהירה (Underweight / Cautious)",
             0xFF3B5C,
             "הורדה / צמצום"
         )
     return (
-        "🟡 עדכון הקצאה / שינוי עמדה (Allocation / Sector Note)",
+        "🟡 עדכון הקצאה / סקירה כללית (Allocation / Market Note)",
         0xFFD700,
         "עדכון עמדה"
     )
 
 def fetch_institutional_items():
     found = []
-    total_parsed = 0
-    inst_only_count = 0
     headers = {"User-Agent": "Mozilla/5.0"}
 
     for url in RSS_FEEDS:
         try:
             resp = requests.get(url, headers=headers, timeout=15)
             if resp.status_code != 200:
-                print(f"Feed returned status {resp.status_code}: {url}")
                 continue
             root = ET.fromstring(resp.content)
-            items = root.findall(".//item")
-            total_parsed += len(items)
-            for item in items:
+            for item in root.findall(".//item"):
                 title_el = item.find("title")
                 link_el = item.find("link")
                 desc_el = item.find("description")
-                pub_el = item.find("pubDate")
 
                 title = clean_html(title_el.text) if title_el is not None and title_el.text else ""
                 link = link_el.text.strip() if link_el is not None and link_el.text else ""
                 desc = clean_html(desc_el.text) if desc_el is not None and desc_el.text else ""
-                pub_date = clean_html(pub_el.text) if pub_el is not None and pub_el.text else ""
 
                 if not title:
                     continue
 
                 combined = f"{title} {desc}".lower()
+
+                if any(bad in combined for bad in EXCLUDE_KEYWORDS):
+                    continue
+
                 insts = detect_institutions(combined)
-                if insts:
-                    inst_only_count += 1
+                has_equity_ctx = any(eq in combined for eq in EQUITY_CONTEXT_KEYWORDS)
                 alloc_hits = sum(1 for kw in ALLOCATION_KEYWORDS if kw in combined)
 
-                if insts and alloc_hits >= 1:
+                if insts and has_equity_ctx and alloc_hits >= 1:
                     sectors = detect_sectors(combined)
                     stance = detect_stance(combined)
                     score = len(insts) * 2 + alloc_hits
@@ -176,7 +194,6 @@ def fetch_institutional_items():
                         "title": title,
                         "desc": desc,
                         "link": link,
-                        "pub_date": pub_date,
                         "institutions": insts,
                         "sectors": sectors,
                         "stance": stance,
@@ -185,7 +202,6 @@ def fetch_institutional_items():
         except Exception as e:
             print(f"RSS error for {url}: {e}")
 
-    print(f"Parsed {total_parsed} RSS items | Matched institutions: {inst_only_count} | Passed allocation filter: {len(found)}")
     found.sort(key=lambda x: x["score"], reverse=True)
     return found
 
@@ -228,11 +244,7 @@ def send_inst_alert(item: dict):
         "username": "Quantum Institutional Radar | Ilan VIP",
         "embeds": [embed]
     }
-    resp = requests.post(INST_WEBHOOK_URL, json=payload, timeout=20)
-    if resp.status_code not in (200, 204):
-        print(f"Discord webhook status {resp.status_code}: {resp.text}")
-    else:
-        print(f"Sent alert for: {inst_str} -> {item['title'][:60]}")
+    requests.post(INST_WEBHOOK_URL, json=payload, timeout=20)
 
 def run_bot():
     seen_ids = load_cache()
