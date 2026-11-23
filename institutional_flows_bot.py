@@ -15,9 +15,10 @@ INST_WEBHOOK_URL = "https://discord.com/api/webhooks/1573645677118881833/H_urKxN
 CACHE_FILE = "sent_inst_notes.json"
 
 RSS_FEEDS = [
-    "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,IWM,XLF,XLK,XLE,XLV,XLI,SMH,IGV&region=US&lang=en-US",
+    "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,IWM,XLF,XLK,XLE,XLV,XLI,XLY,XLP,SMH,IGV&region=US&lang=en-US",
     "https://search.cnbc.com/rs/search/combinedXML/view.xml?partnerId=wrss01&id=10000664",
     "https://www.investing.com/rss/news_25.rss",
+    "https://www.investing.com/rss/news_1.rss",
     "https://www.marketwatch.com/rss/topstories",
 ]
 
@@ -38,6 +39,7 @@ INSTITUTIONS = {
     "RBC": ["rbc", "royal bank of canada"],
     "Bernstein": ["bernstein"],
     "Evercore": ["evercore"],
+    "Citadel / Hedge Funds": ["citadel", "hedge fund", "fund manager", "asset manager"],
 }
 
 SECTORS = {
@@ -47,7 +49,8 @@ SECTORS = {
     "אנרגיה וסחורות (Energy / Commodities)": ["energy", "oil", "crude", "xle", "commodity", "commodities", "gold"],
     "בריאות ופארמה (Healthcare)": ["healthcare", "health care", "pharma", "biotech", "xlv"],
     "תעשייה וביטחון (Industrials / Defense)": ["industrial", "defense", "xli", "aerospace"],
-    "מניות ואקוויטי כללי (Equities / Allocation)": ["equities", "equity", "stocks", "s&p 500", "spy", "allocation", "asset mix"],
+    "צרכנות (Consumer)": ["consumer", "retail", "xly", "xlp", "spending"],
+    "מניות ואקוויטי כללי (Equities / Allocation)": ["equities", "equity", "stocks", "s&p 500", "spy", "allocation", "asset mix", "inflows", "outflows", "flows"],
     "אג\"ח ותשואות (Rates / Bonds)": ["treasury", "yields", "bonds", "fixed income", "rates"],
 }
 
@@ -57,7 +60,8 @@ ALLOCATION_KEYWORDS = [
     "raise", "raises", "raised", "cut", "cuts", "lower", "lowers",
     "upgrade", "downgrade", "bullish", "bearish", "rotate", "rotation",
     "tilt", "favor", "favors", "cautious", "defensive", "cyclical",
-    "target", "price target", "outperform", "underperform"
+    "target", "price target", "outperform", "underperform",
+    "buy", "sell", "inflows", "outflows", "flows", "rally", "risk"
 ]
 
 def clean_html(raw_text: str) -> str:
@@ -104,8 +108,8 @@ def detect_sectors(text_lower: str) -> list[str]:
     return matched if matched else ["הקצאת נכסים כללית (General Market / Strategy)"]
 
 def detect_stance(text_lower: str):
-    bull_words = ["overweight", "raise", "raises", "raised", "upgrade", "upgraded", "bullish", "favor", "favors", "increase", "boost", "outperform"]
-    bear_words = ["underweight", "cut", "cuts", "lower", "lowers", "downgrade", "downgraded", "bearish", "cautious", "defensive", "trim", "reduce", "underperform"]
+    bull_words = ["overweight", "raise", "raises", "raised", "upgrade", "upgraded", "bullish", "favor", "favors", "increase", "boost", "outperform", "buy", "inflows"]
+    bear_words = ["underweight", "cut", "cuts", "lower", "lowers", "downgrade", "downgraded", "bearish", "cautious", "defensive", "trim", "reduce", "underperform", "sell", "outflows"]
 
     bull_hits = sum(1 for w in bull_words if w in text_lower)
     bear_hits = sum(1 for w in bear_words if w in text_lower)
@@ -130,15 +134,20 @@ def detect_stance(text_lower: str):
 
 def fetch_institutional_items():
     found = []
+    total_parsed = 0
+    inst_only_count = 0
     headers = {"User-Agent": "Mozilla/5.0"}
 
     for url in RSS_FEEDS:
         try:
             resp = requests.get(url, headers=headers, timeout=15)
             if resp.status_code != 200:
+                print(f"Feed returned status {resp.status_code}: {url}")
                 continue
             root = ET.fromstring(resp.content)
-            for item in root.findall(".//item"):
+            items = root.findall(".//item")
+            total_parsed += len(items)
+            for item in items:
                 title_el = item.find("title")
                 link_el = item.find("link")
                 desc_el = item.find("description")
@@ -154,6 +163,8 @@ def fetch_institutional_items():
 
                 combined = f"{title} {desc}".lower()
                 insts = detect_institutions(combined)
+                if insts:
+                    inst_only_count += 1
                 alloc_hits = sum(1 for kw in ALLOCATION_KEYWORDS if kw in combined)
 
                 if insts and alloc_hits >= 1:
@@ -174,6 +185,7 @@ def fetch_institutional_items():
         except Exception as e:
             print(f"RSS error for {url}: {e}")
 
+    print(f"Parsed {total_parsed} RSS items | Matched institutions: {inst_only_count} | Passed allocation filter: {len(found)}")
     found.sort(key=lambda x: x["score"], reverse=True)
     return found
 
@@ -219,6 +231,8 @@ def send_inst_alert(item: dict):
     resp = requests.post(INST_WEBHOOK_URL, json=payload, timeout=20)
     if resp.status_code not in (200, 204):
         print(f"Discord webhook status {resp.status_code}: {resp.text}")
+    else:
+        print(f"Sent alert for: {inst_str} -> {item['title'][:60]}")
 
 def run_bot():
     seen_ids = load_cache()
