@@ -1,0 +1,37 @@
+name: Quantum Institutional Flows Radar
+
+on:
+  schedule:
+    - cron: '0 13-22 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scan_inst:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run Institutional Flows Bot
+        run: python institutional_flows_bot.py
+
+      - name: Save sent alerts cache
+        run: |
+          git config --global user.name "Quantum Institutional Bot"
+          git config --global user.email "bot@github.com"
+          git add sent_inst_notes.json || true
+          git diff --staged --quiet || git commit -m "Update institutional notes cache [skip ci]"
+          git push || true
