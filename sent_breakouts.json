@@ -1,6 +1,14 @@
 {
   "date": "2026-11-24",
   "week": "2026-W47",
-  "daily": [],
-  "weekly": []
+  "daily": [
+    "GILD",
+    "TGT",
+    "WMT"
+  ],
+  "weekly": [
+    "GILD",
+    "TGT",
+    "WMT"
+  ]
 }
