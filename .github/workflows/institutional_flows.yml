@@ -2,33 +2,61 @@ name: Quantum Institutional Flows Radar
 
 on:
   schedule:
-    - cron: '0 13-22 * * 1-5'
+    # דקה 23 עוקפת עומס | 13:23 עד 21:23 UTC = 15:23 עד 23:23 שעון ישראל (שעון חורף)
+    - cron: '23 13-21 * * 1-5'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: institutional-flows-radar
+  cancel-in-progress: true
+
 jobs:
   scan_inst:
     runs-on: ubuntu-latest
     steps:
+      - name: Check Active US Hours (Guard against delayed runs)
+        id: hours_check
+        if: github.event_name == 'schedule'
+        run: |
+          python3 -c "
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          now_ny = datetime.now(ZoneInfo('America/New_York'))
+          mins = now_ny.hour * 60 + now_ny.minute
+          # פעיל בין 08:00 ל-17:00 שעון ניו יורק (15:00 עד 00:00 ישראל)
+          is_active = (now_ny.weekday() < 5) and (480 <= mins <= 1020)
+          print(f'NY Time: {now_ny.strftime(\"%Y-%m-%d %H:%M\")} | Active Window: {is_active}')
+          with open('$GITHUB_OUTPUT', 'a') as f:
+              f.write(f'active={str(is_active).lower()}\n')
+          "
+
       - name: Checkout code
+        if: github.event_name == 'workflow_dispatch' || steps.hours_check.outputs.active == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: github.event_name == 'workflow_dispatch' || steps.hours_check.outputs.active == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.hours_check.outputs.active == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
       - name: Run Institutional Flows Bot
+        if: github.event_name == 'workflow_dispatch' || steps.hours_check.outputs.active == 'true'
+        env:
+          TZ: Asia/Jerusalem
         run: python institutional_flows_bot.py
 
       - name: Save sent alerts cache
+        if: github.event_name == 'workflow_dispatch' || steps.hours_check.outputs.active == 'true'
         run: |
           git config --global user.name "Quantum Institutional Bot"
           git config --global user.email "bot@github.com"
