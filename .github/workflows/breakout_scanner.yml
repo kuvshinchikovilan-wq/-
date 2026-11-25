@@ -2,37 +2,52 @@ name: Quantum Breakout Live Scanner
 
 on:
   schedule:
-    # רץ כל 30 דקות במהלך שעות המסחר בוול סטריט (ימים ב'-ו')
-    - cron: '0,30 14-21 * * 1-5'
+    # דקות 17 ו-47 עוקפות את העומס של GitHub | שעות 14-20 UTC = 16:47 עד 22:47 שעון ישראל (שעון חורף)
+    - cron: '17,47 14-20 * * 1-5'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# מונע הצטברות של ריצות תקועות אחת על השנייה
+concurrency:
+  group: breakout-live-scanner
+  cancel-in-progress: true
+
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
+      - name: Check if US Market is Open (Guard against delayed runs)
+        id: market_check
+        if: github.event_name == 'schedule'
+        run: |
+          python3 -c "
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          now_ny = datetime.now(ZoneInfo('America/New_York'))
+          mins = now_ny.hour * 60 + now_ny.minute
+          is_open = (now_ny.weekday() < 5) and (570 <= mins <= 965)
+          print(f'NY Time: {now_ny.strftime(\"%Y-%m-%d %H:%M\")} | Market Open: {is_open}')
+          with open('$GITHUB_OUTPUT', 'a') as f:
+              f.write(f'open={str(is_open).lower()}\n')
+          "
+
       - name: Checkout code
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
         run: |
           pip install --upgrade pip
           pip install six matplotlib yfinance mplfinance pandas numpy requests
 
       - name: Run Live Breakout Scanner
-        run: python breakout_scanner.py
-
-      - name: Save sent tickers memory to repo
-        run: |
-          git config --global user.name "Quantum Breakout Bot"
-          git config --global user.email "bot@github.com"
-          git add sent_breakouts.json || true
-          git diff --staged --quiet || git commit -m "Update breakout memory cache [skip ci]"
-          git push || true
+        if: github.event_name == '
