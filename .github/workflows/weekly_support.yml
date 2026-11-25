@@ -2,34 +2,60 @@ name: Quantum Weekly Support Scanner
 
 on:
   schedule:
-    # רץ פעמיים ביום מסחר: 15:00 ו-19:00 UTC (17:00 ו-21:00 שעון ישראל)
-    - cron: '0 15,19 * * 1-5'
+    # דקה 27 עוקפת עומס | 15:27 ו-19:27 UTC = 17:27 ו-21:27 שעון ישראל (שעון חורף)
+    - cron: '27 15,19 * * 1-5'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: weekly-support-scanner
+  cancel-in-progress: true
+
 jobs:
   scan_supports:
     runs-on: ubuntu-latest
     steps:
+      - name: Check if US Market is Open (Guard against delayed runs)
+        id: market_check
+        if: github.event_name == 'schedule'
+        run: |
+          python3 -c "
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          now_ny = datetime.now(ZoneInfo('America/New_York'))
+          mins = now_ny.hour * 60 + now_ny.minute
+          is_open = (now_ny.weekday() < 5) and (570 <= mins <= 965)
+          print(f'NY Time: {now_ny.strftime(\"%Y-%m-%d %H:%M\")} | Market Open: {is_open}')
+          with open('$GITHUB_OUTPUT', 'a') as f:
+              f.write(f'open={str(is_open).lower()}\n')
+          "
+
       - name: Checkout code
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
         run: |
           pip install --upgrade pip
           pip install six matplotlib yfinance mplfinance pandas numpy requests
 
       - name: Run Weekly Support Scanner
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
+        env:
+          TZ: Asia/Jerusalem
         run: python weekly_support_scanner.py
 
       - name: Save memory cache
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
         run: |
           git config --global user.name "Quantum Support Bot"
           git config --global user.email "bot@github.com"
