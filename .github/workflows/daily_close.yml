@@ -2,9 +2,9 @@ name: ILAN.KUV Daily Market Poster
 
 on:
   schedule:
-    # רץ בימים שני עד שישי בשעה 20:05 UTC (שהם 23:05 שעון ישראל)
-    - cron: '5 20 * * 1-5'
-  workflow_dispatch: # מאפשר לך ללחוץ על כפתור הפעלה ידני לבדיקה בכל רגע
+    # 21:10 UTC = 23:10 שעון ישראל בשעון חורף (16:10 שעון ניו יורק, מיד לאחר סגירת המסחר)
+    - cron: '10 21 * * 1-5'
+  workflow_dispatch: # מאפשר הפעלה ידנית לבדיקה בכל רגע
 
 jobs:
   build-and-send:
@@ -27,4 +27,5 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           WHATSAPP_WEBHOOK_URL: ${{ secrets.WHATSAPP_WEBHOOK_URL }}
+          TZ: Asia/Jerusalem
         run: python generate_poster.py
