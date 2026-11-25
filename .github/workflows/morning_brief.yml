@@ -2,27 +2,53 @@ name: Daily Morning Brief
 
 on:
   schedule:
-    - cron: '0 11 * * 1-5'
+    # 06:43 UTC = 08:43 בבוקר שעון ישראל (שעון חורף) | דקה 43 עוקפת עומס
+    - cron: '43 6 * * 1-5'
   workflow_dispatch:
+
+concurrency:
+  group: daily-morning-brief
+  cancel-in-progress: true
 
 jobs:
   send_brief:
     runs-on: ubuntu-latest
     steps:
+      - name: Check Morning Window (Guard against delayed runs)
+        id: window_check
+        if: github.event_name == 'schedule'
+        run: |
+          python3 -c "
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          now_il = datetime.now(ZoneInfo('Asia/Jerusalem'))
+          mins = now_il.hour * 60 + now_il.minute
+          # מאשר ריצה אוטומטית רק בין 07:30 ל-12:30 שעון ישראל
+          is_valid = (now_il.weekday() < 5) and (450 <= mins <= 750)
+          print(f'IL Time: {now_il.strftime(\"%Y-%m-%d %H:%M\")} | Valid Morning Window: {is_valid}')
+          with open('$GITHUB_OUTPUT', 'a') as f:
+              f.write(f'valid={str(is_valid).lower()}\n')
+          "
+
       - name: Checkout code
+        if: github.event_name == 'workflow_dispatch' || steps.window_check.outputs.valid == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: github.event_name == 'workflow_dispatch' || steps.window_check.outputs.valid == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install Playwright & Libraries
+        if: github.event_name == 'workflow_dispatch' || steps.window_check.outputs.valid == 'true'
         run: |
           pip install requests pytz playwright
           playwright install chromium
 
       - name: Run script and send to Discord
+        if: github.event_name == 'workflow_dispatch' || steps.window_check.outputs.valid == 'true'
         env:
           DISCORD_WEBHOOK_MORNING: ${{ secrets.DISCORD_WEBHOOK_MORNING }}
+          TZ: Asia/Jerusalem
         run: python morning_brief.py
