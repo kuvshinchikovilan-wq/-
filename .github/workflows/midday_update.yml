@@ -2,27 +2,53 @@ name: Mid-Day Market Update
 
 on:
   schedule:
-    - cron: '0 17 * * 1-5'
+    # 17:13 UTC = 19:13 שעון ישראל בשעון חורף (12:13 בצהריים בניו יורק)
+    - cron: '13 17 * * 1-5'
   workflow_dispatch:
+
+concurrency:
+  group: midday-market-update
+  cancel-in-progress: true
 
 jobs:
   send_midday:
     runs-on: ubuntu-latest
     steps:
+      - name: Check Mid-Day Window (Guard against delayed runs)
+        id: window_check
+        if: github.event_name == 'schedule'
+        run: |
+          python3 -c "
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          now_ny = datetime.now(ZoneInfo('America/New_York'))
+          mins = now_ny.hour * 60 + now_ny.minute
+          # מאשר ריצה רק בין 11:30 ל-15:30 שעון ניו יורק (18:30 עד 22:30 ישראל)
+          is_valid = (now_ny.weekday() < 5) and (690 <= mins <= 930)
+          print(f'NY Time: {now_ny.strftime(\"%Y-%m-%d %H:%M\")} | Valid Mid-Day Window: {is_valid}')
+          with open('$GITHUB_OUTPUT', 'a') as f:
+              f.write(f'valid={str(is_valid).lower()}\n')
+          "
+
       - name: Checkout code
+        if: github.event_name == 'workflow_dispatch' || steps.window_check.outputs.valid == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: github.event_name == 'workflow_dispatch' || steps.window_check.outputs.valid == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install Playwright & Libraries
+        if: github.event_name == 'workflow_dispatch' || steps.window_check.outputs.valid == 'true'
         run: |
           pip install requests pytz yfinance playwright
           playwright install chromium
 
       - name: Run script and send to Discord
+        if: github.event_name == 'workflow_dispatch' || steps.window_check.outputs.valid == 'true'
         env:
           DISCORD_WEBHOOK_MIDDAY: ${{ secrets.DISCORD_WEBHOOK_MIDDAY }}
+          TZ: Asia/Jerusalem
         run: python midday_update.py
