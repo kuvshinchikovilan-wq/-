@@ -1,9 +1,6 @@
 name: Quantum Weekly Support Scanner
 
 on:
-  schedule:
-    # דקה 27 עוקפת עומס | 15:27 ו-19:27 UTC = 17:27 ו-21:27 שעון ישראל (שעון חורף)
-    - cron: '27 15,19 * * 1-5'
   workflow_dispatch:
 
 permissions:
