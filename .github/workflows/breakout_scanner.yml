@@ -2,14 +2,12 @@ name: Quantum Breakout Live Scanner
 
 on:
   schedule:
-    # דקות 17 ו-47 עוקפות את העומס של GitHub | שעות 14-20 UTC = 16:47 עד 22:47 שעון ישראל (שעון חורף)
     - cron: '17,47 14-20 * * 1-5'
   workflow_dispatch:
 
 permissions:
   contents: write
 
-# מונע הצטברות של ריצות תקועות אחת על השנייה
 concurrency:
   group: breakout-live-scanner
   cancel-in-progress: true
@@ -50,4 +48,16 @@ jobs:
           pip install six matplotlib yfinance mplfinance pandas numpy requests
 
       - name: Run Live Breakout Scanner
-        if: github.event_name == '
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
+        env:
+          TZ: Asia/Jerusalem
+        run: python breakout_scanner.py
+
+      - name: Save sent tickers memory to repo
+        if: github.event_name == 'workflow_dispatch' || steps.market_check.outputs.open == 'true'
+        run: |
+          git config --global user.name "Quantum Breakout Bot"
+          git config --global user.email "bot@github.com"
+          git add sent_breakouts.json || true
+          git diff --staged --quiet || git commit -m "Update breakout memory cache [skip ci]"
+          git push || true
