@@ -1,13 +1,15 @@
 {
-  "date": "2026-11-24",
+  "date": "2026-11-26",
   "week": "2026-W47",
   "daily": [
-    "GILD",
-    "TGT",
-    "WMT"
+    "DIS",
+    "LOW",
+    "VKTX"
   ],
   "weekly": [
+    "DIS",
     "GILD",
+    "LOW",
     "TGT",
     "WMT"
   ]
