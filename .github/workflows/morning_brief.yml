@@ -1,9 +1,6 @@
 name: Daily Morning Brief
 
 on:
-  schedule:
-    # 06:43 UTC = 08:43 בבוקר שעון ישראל (שעון חורף) | דקה 43 עוקפת עומס
-    - cron: '43 6 * * 1-5'
   workflow_dispatch:
 
 concurrency:
