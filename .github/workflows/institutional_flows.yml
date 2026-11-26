@@ -1,9 +1,6 @@
 name: Quantum Institutional Flows Radar
 
 on:
-  schedule:
-    # דקה 23 עוקפת עומס | 13:23 עד 21:23 UTC = 15:23 עד 23:23 שעון ישראל (שעון חורף)
-    - cron: '23 13-21 * * 1-5'
   workflow_dispatch:
 
 permissions:
