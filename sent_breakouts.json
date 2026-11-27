@@ -2,14 +2,19 @@
   "date": "2026-11-27",
   "week": "2026-W47",
   "daily": [
-    "RBLX"
+    "DIS",
+    "RBLX",
+    "REGN"
   ],
   "weekly": [
     "COST",
     "DIS",
     "GILD",
+    "HD",
     "LOW",
     "RBLX",
+    "REGN",
+    "ROKU",
     "TGT",
     "WMT"
   ]
