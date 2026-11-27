@@ -1,15 +1,15 @@
 {
-  "date": "2026-11-26",
+  "date": "2026-11-27",
   "week": "2026-W47",
   "daily": [
-    "DIS",
-    "LOW",
-    "VKTX"
+    "RBLX"
   ],
   "weekly": [
+    "COST",
     "DIS",
     "GILD",
     "LOW",
+    "RBLX",
     "TGT",
     "WMT"
   ]
